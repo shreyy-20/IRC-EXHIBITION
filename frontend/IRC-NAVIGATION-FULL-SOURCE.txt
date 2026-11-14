@@ -1,0 +1,1139 @@
+IRC EXHIBITION FINDER - SOURCE REVIEW
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\api.ts ==========
+import type { EventInfo, Exhibitor, Booth, RouteResult } from './types'
+
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    throw new Error(body.detail || `Request failed (${response.status})`)
+  }
+  return response.json() as Promise<T>
+}
+
+export const getEvent = (id: string) => request<EventInfo>(`/events/${id}`)
+export const getExhibitors = (id: string, q = '') =>
+  request<Exhibitor[]>(`/events/${id}/exhibitors${q ? `?q=${encodeURIComponent(q)}` : ''}`)
+export const getBooths = (hallId: string) => request<Booth[]>(`/halls/${hallId}/booths`)
+export const getRoute = (start_node: string, destination_node: string) =>
+  request<RouteResult>('/navigation/route', {
+    method: 'POST',
+    body: JSON.stringify({ start_node, destination_node }),
+  })
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\App.tsx ==========
+import { useEffect, useMemo, useState } from 'react'
+import { Search, MapPin, Navigation, Building2, ArrowRight, LocateFixed, Compass, QrCode, ShieldCheck, LogIn, Plus, X, LayoutDashboard } from 'lucide-react'
+import { getBooths, getEvent, getExhibitors, getRoute } from './api'
+import type { Booth, EventInfo, Exhibitor, RouteResult } from './types'
+import FloorMap from './components/FloorMap'
+import VenueLayouts from './components/VenueLayouts'
+import StallExplorer from './components/StallExplorer'
+
+const EVENT_ID = 'demo-irc-expo'
+const HALL_ID = 'demo-hall-1'
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
+export default function App() {
+  const [event, setEvent] = useState<EventInfo | null>(null)
+  const [exhibitors, setExhibitors] = useState<Exhibitor[]>([])
+  const [booths, setBooths] = useState<Booth[]>([])
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<Booth | null>(null)
+  const [route, setRoute] = useState<RouteResult | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [token, setToken] = useState(localStorage.getItem('irc_admin_token') || '')
+  const [username, setUsername] = useState('admin')
+  const [password, setPassword] = useState('')
+  const [adminStats, setAdminStats] = useState<{events:number; exhibitors:number; halls:number; booths:number} | null>(null)
+  const [newName, setNewName] = useState('')
+  const [newCategory, setNewCategory] = useState('General')
+  const [qrUrl, setQrUrl] = useState('')
+
+  async function reloadData() {
+    const [eventData, exhibitorData, boothData] = await Promise.all([getEvent(EVENT_ID), getExhibitors(EVENT_ID), getBooths(HALL_ID)])
+    setEvent(eventData); setExhibitors(exhibitorData); setBooths(boothData)
+  }
+
+  useEffect(() => {
+    reloadData().catch((err: Error) => setError(err.message)).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const destination = params.get('destination')
+    if (destination) {
+      const match = booths.find(b => b.id === destination || b.code === destination)
+      if (match) showRoute(match)
+    }
+  }, [booths])
+
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return exhibitors
+    return exhibitors.filter(e => [e.name, e.category, e.description].some(v => v.toLowerCase().includes(term)) ||
+      booths.some(b => b.exhibitor?.id === e.id && b.code.toLowerCase().includes(term)))
+  }, [query, exhibitors, booths])
+
+  async function showRoute(booth: Booth) {
+    setSelected(booth); setRoute(null); setError('')
+    try {
+      const node = `booth-${booth.code.toLowerCase()}`
+      const result = await getRoute('entrance', node)
+      setRoute(result)
+      fetch(`${API}/analytics/track`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({event_id:EVENT_ID,event_type:'destination_selected',entity_id:booth.id})}).catch(()=>{})
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to calculate route') }
+  }
+
+  async function adminLogin(e: React.FormEvent) {
+    e.preventDefault()
+    const response = await fetch(`${API}/auth/login`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})})
+    if (!response.ok) { setError('Admin login failed. Check credentials and backend.'); return }
+    const data = await response.json()
+    localStorage.setItem('irc_admin_token',data.access_token); setToken(data.access_token); setPassword('')
+    await loadAdminStats(data.access_token)
+  }
+  async function loadAdminStats(auth = token) {
+    const response = await fetch(`${API}/admin/dashboard`,{headers:{Authorization:`Bearer ${auth}`}})
+    if (response.ok) setAdminStats(await response.json())
+  }
+  async function addExhibitor(e: React.FormEvent) {
+    e.preventDefault()
+    const id = `ex-${Date.now()}`
+    const response = await fetch(`${API}/admin/exhibitors`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({id,event_id:EVENT_ID,name:newName,category:newCategory,description:'Added through the demonstration admin dashboard.',website:'',is_featured:false})})
+    if (!response.ok) {setError('Could not add exhibitor.');return}
+    setNewName(''); await reloadData(); await loadAdminStats()
+  }
+  async function makeQr() {
+    if (!selected) return
+    const response = await fetch(`${API}/qr/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_id:EVENT_ID,destination_id:selected.id,destination_label:selected.code})})
+    if (!response.ok) {setError('QR generation failed.');return}
+    const blob = await response.blob()
+    setQrUrl(URL.createObjectURL(blob))
+  }
+
+  const selectedExhibitor = selected?.exhibitor
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <a className="brand" href="#"><span className="brand-mark">IRC</span><span>EXHIBITION FINDER<small>SMART EXHIBITION DISCOVERY</small></span></a>
+        <nav><a href="#explore">Explore</a><a href="#directory">Exhibitors</a><a href="#about">About</a></nav>
+        <button className="admin-link" onClick={()=>{setAdminOpen(!adminOpen);setError('')}}><ShieldCheck size={15}/> Organiser access</button>
+      </header>
+
+      {adminOpen && <section className="admin-panel">
+        <div className="admin-panel-head"><div><div className="eyebrow">ORGANISER CONSOLE</div><h2>Administration</h2></div><button className="icon-button" onClick={()=>setAdminOpen(false)}><X/></button></div>
+        {!token ? <form className="admin-login" onSubmit={adminLogin}><label>Username<input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username"/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label><button className="primary-button" type="submit"><LogIn size={16}/> Sign in</button><small>Development seed credentials are documented in README. Change them before any shared deployment.</small></form> :
+        <><div className="admin-stats">{adminStats ? Object.entries(adminStats).map(([k,v])=><div key={k}><strong>{v}</strong><span>{k}</span></div>) : <button onClick={()=>loadAdminStats()}>Load dashboard statistics</button>}</div>
+        <form className="admin-add" onSubmit={addExhibitor}><h3><Plus size={16}/> Add exhibitor</h3><input required placeholder="Company name" value={newName} onChange={e=>setNewName(e.target.value)}/><input value={newCategory} onChange={e=>setNewCategory(e.target.value)} placeholder="Category"/><button className="primary-button" type="submit">Save exhibitor</button></form>
+        <button className="logout-button" onClick={()=>{localStorage.removeItem('irc_admin_token');setToken('');setAdminStats(null)}}>Sign out</button></>}
+      </section>}
+
+      <main>
+        <section className="hero">
+          <div className="hero-copy"><div className="eyebrow"><span/> EXHIBITION DISCOVERY PLATFORM</div>
+            <h1>Find your way.<br/><em>Discover more.</em></h1>
+            <p>Explore exhibitors, locate booths and navigate exhibition halls with one simple digital experience.</p>
+            <a className="primary-button" href="#explore">Explore exhibition <ArrowRight size={17}/></a>
+            <div className="hero-meta"><span><MapPin size={15}/> Interactive venue map</span><span><QrCode size={15}/> QR-ready navigation</span></div>
+          </div>
+          <div className="hero-art"><div className="art-card art-card-back"><div className="art-label">HALL DIRECTORY</div><div className="art-lines"><i/><i/><i/></div></div><div className="art-card art-card-front"><div className="art-top"><Compass size={19}/><span>LIVE MAP PREVIEW</span></div><div className="mini-map"><i/><i/><i/><b>YOU ARE HERE</b></div><div className="art-foot"><span>Explore halls</span><ArrowRight size={16}/></div></div><div className="floating-pin"><MapPin size={19}/></div></div>
+        </section>
+        <section className="stats"><div><strong>{exhibitors.length || '—'}</strong><span>Sample exhibitors</span></div><div><strong>{booths.length || '—'}</strong><span>Mapped booths</span></div><div><strong>01</strong><span>Sample hall</span></div><div><strong>24/7</strong><span>Digital discovery</span></div></section>
+        <section id="explore" className="section">
+          <div className="section-heading"><div><div className="eyebrow">PLAN YOUR VISIT</div><h2>Explore the exhibition</h2><p>Search for an exhibitor or select a booth directly on the map.</p></div><span className="sample-tag">DEMO ENVIRONMENT</span></div>
+          {loading ? <div className="notice">Loading exhibition data…</div> : error && !event ? <div className="notice error">{error} — Start the FastAPI backend and PostgreSQL database.</div> : <>
+            <div className="event-strip"><div className="event-icon"><Building2/></div><div><strong>{event?.name}</strong><span>{event?.venue} · {event?.is_demo ? 'Illustrative sample event' : 'Event'}</span></div><span className="event-status">AVAILABLE TO EXPLORE</span></div>
+            <div className="explorer-grid">
+              <div className="directory-panel" id="directory"><div className="panel-title"><div><h3>Find an exhibitor</h3><p>Search by company, category or booth.</p></div><span>{filtered.length} results</span></div>
+                <label className="search-box"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Try “RoadTech” or “B01”…"/></label>
+                <div className="results-list">{filtered.map(ex=>{const booth=booths.find(b=>b.exhibitor?.id===ex.id);return <button className={`result-item ${selected?.exhibitor?.id===ex.id?'active':''}`} key={ex.id} onClick={()=>booth&&showRoute(booth)}><span className="result-icon"><Building2 size={18}/></span><span className="result-copy"><strong>{ex.name}</strong><small>{ex.category}</small></span><span className="booth-code">{booth?.code||'—'}</span></button>})}{filtered.length===0&&<div className="empty">No matching exhibitors. Try another search.</div>}</div>
+              </div>
+              <div className="map-panel"><div className="panel-title"><div><h3>Interactive floor map</h3><p>Select any booth to view its details.</p></div><span className="map-chip"><span/> SAMPLE MAP</span></div>
+                <FloorMap booths={booths} selectedId={selected?.id||null} onSelect={showRoute}/>
+                {selected&&<div className="destination-card"><div><small>SELECTED DESTINATION</small><strong>{selectedExhibitor?.name||'Unassigned booth'}</strong><span>{selected.code} · Sample Hall 1</span></div><button onClick={()=>showRoute(selected)}><Navigation size={16}/> Find route</button><button onClick={makeQr}><QrCode size={16}/> QR code</button></div>}
+                {qrUrl&&<div className="qr-preview"><img src={qrUrl} alt="QR code for selected booth"/><span>Scan to open this destination on a phone.</span><a href={qrUrl} download="irc-exhibition-destination.png">Download QR code</a></div>}
+                {route&&<div className="route-card"><div><LocateFixed size={17}/><strong>Route from Main Entrance</strong></div><p>{route.nodes.join(' → ')}</p><div className="route-metrics"><span><strong>{route.distance_m} m</strong> distance</span><span><strong>{route.walking_minutes} min</strong> estimated walk</span></div><small>{route.message}</small></div>}
+                {error&&event&&<div className="notice error">{error}</div>}
+              </div>
+            </div>
+          </>}
+        </section>
+        <VenueLayouts />
+        <StallExplorer />
+        <section className="features" id="about"><div className="eyebrow">BUILT FOR BETTER EXHIBITIONS</div><h2>Everything visitors need.<br/><em>One connected platform.</em></h2><div className="feature-grid"><article><Search/><h3>Exhibitor discovery</h3><p>Find companies quickly using searchable exhibitor listings.</p></article><article><MapPin/><h3>Interactive maps</h3><p>Explore halls, booths and visitor facilities visually.</p></article><article><Navigation/><h3>Smart navigation</h3><p>Calculate routes from a known starting point to a selected booth.</p></article><article><QrCode/><h3>Mobile-ready</h3><p>Continue the visitor journey on a phone through QR links.</p></article></div></section>
+      </main>
+      <footer><div className="brand"><span className="brand-mark">IRC</span><span>EXHIBITION FINDER<small>FIND EXHIBITORS. EXPLORE HALLS. NAVIGATE SMARTER.</small></span></div><span>Demonstration software · Sample data only</span></footer>
+    </div>
+  )
+}
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\main.tsx ==========
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+import './styles.css'
+
+const queryClient = new QueryClient()
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter><App /></BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>,
+)
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\styles.css ==========
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root{font-family:'DM Sans',sans-serif;color:#14283d;background:#fff;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-width:320px}.app{overflow:hidden}.topbar{height:82px;padding:0 max(calc((100vw - 1200px)/2),5vw);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e8edf2;background:#fff}.brand{display:flex;align-items:center;gap:11px;color:#10283f;text-decoration:none;font:800 13px Manrope,sans-serif;letter-spacing:.07em}.brand small{display:block;font:600 8px 'DM Sans';letter-spacing:.16em;color:#8392a2;margin-top:4px}.brand-mark{background:#143a5b;color:white;border-radius:9px;padding:11px 9px;font:800 14px Manrope;letter-spacing:0}.topbar nav{display:flex;gap:34px}.topbar nav a,.admin-link{font-size:12px;color:#536579;text-decoration:none;font-weight:600}.admin-link{display:flex;align-items:center;gap:8px;color:#173c5b}.hero{max-width:1200px;margin:auto;padding:90px 24px 76px;display:grid;grid-template-columns:1.05fr .95fr;align-items:center;gap:50px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.18em;color:#47718e}.eyebrow span{display:inline-block;width:7px;height:7px;background:#2b9a83;border-radius:50%;margin-right:8px}.hero h1,.features h2{font:800 clamp(46px,6vw,76px)/1.06 Manrope,sans-serif;letter-spacing:-.055em;margin:22px 0;color:#102a42}.hero h1 em,.features h2 em{font-style:normal;color:#477b9b}.hero-copy>p{max-width:490px;color:#687b8e;font-size:16px;line-height:1.8;margin:23px 0 28px}.primary-button{display:inline-flex;align-items:center;gap:16px;background:#173d5d;color:#fff;text-decoration:none;border-radius:7px;padding:15px 20px;font-size:12px;font-weight:700;box-shadow:0 8px 20px #173d5d22}.hero-meta{display:flex;gap:22px;margin-top:35px;color:#77889a;font-size:10px}.hero-meta span{display:flex;align-items:center;gap:7px}.hero-art{height:350px;position:relative;background:linear-gradient(140deg,#e8f0f5,#f5f8fa);border-radius:20px;overflow:hidden}.art-card{position:absolute;background:white;border:1px solid #e6edf2;border-radius:13px;box-shadow:0 20px 50px #183a571c}.art-card-back{width:205px;height:240px;right:45px;top:40px;padding:23px;transform:rotate(8deg)}.art-label{font-size:9px;letter-spacing:.15em;font-weight:800;color:#7890a4}.art-lines{margin-top:35px}.art-lines i{display:block;height:24px;border-radius:5px;background:#edf3f7;margin:13px 0}.art-card-front{width:280px;height:220px;left:38px;top:82px;padding:18px}.art-top{display:flex;gap:9px;align-items:center;color:#244e6c;font-size:9px;font-weight:800;letter-spacing:.1em}.mini-map{height:135px;margin-top:16px;background:#f2f6f8;border-radius:8px;position:relative;display:flex;justify-content:space-around;align-items:center}.mini-map i{height:70px;width:48px;background:white;border:1px solid #b7c9d5;border-radius:5px}.mini-map b{position:absolute;bottom:10px;left:15px;background:#d8eee9;color:#287866;border-radius:4px;padding:5px;font-size:7px}.art-foot{display:flex;justify-content:space-between;margin-top:12px;color:#45667e;font-size:9px;font-weight:700}.floating-pin{position:absolute;right:58px;bottom:45px;background:#1c5676;color:#fff;border-radius:50%;padding:14px;box-shadow:0 10px 24px #173d5d44}.stats{max-width:1152px;margin:0 auto;padding:27px 35px;border-top:1px solid #e9eef2;border-bottom:1px solid #e9eef2;display:grid;grid-template-columns:repeat(4,1fr)}.stats div{display:flex;flex-direction:column;gap:5px;border-right:1px solid #e8edf1;padding-left:30px}.stats div:first-child{padding-left:0}.stats div:last-child{border:0}.stats strong{font:800 24px Manrope;color:#183e5c}.stats span{font-size:10px;color:#8392a1}.section{max-width:1200px;margin:auto;padding:85px 24px}.section-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:27px}.section-heading h2,.panel-title h3{font:800 30px Manrope;letter-spacing:-.04em;margin:10px 0 6px;color:#16334d}.section-heading p,.panel-title p{font-size:12px;color:#8291a0;margin:0}.sample-tag,.map-chip{font-size:9px;letter-spacing:.12em;font-weight:800;color:#8b7546;background:#f8f3e8;padding:9px 11px;border-radius:5px}.event-strip{display:flex;align-items:center;gap:14px;background:#f5f8fa;padding:16px;border-radius:9px;margin-bottom:18px}.event-icon{width:42px;height:42px;border-radius:8px;background:#e3edf3;color:#315b77;display:grid;place-items:center}.event-strip div:nth-child(2){display:flex;flex-direction:column;gap:5px}.event-strip strong{font-size:12px}.event-strip span{font-size:10px;color:#8392a0}.event-status{margin-left:auto!important;color:#347c68!important;font-size:9px!important;font-weight:800;letter-spacing:.1em}.explorer-grid{display:grid;grid-template-columns: .8fr 1.2fr;gap:18px}.directory-panel,.map-panel{border:1px solid #e7edf1;border-radius:11px;padding:20px;min-width:0}.panel-title{display:flex;justify-content:space-between;align-items:start;gap:10px}.panel-title h3{font-size:17px;margin:0 0 5px}.panel-title>span{font-size:10px;color:#8291a0;white-space:nowrap}.search-box{height:45px;border:1px solid #dfe7ed;border-radius:6px;margin:19px 0 12px;display:flex;align-items:center;gap:10px;padding:0 12px;color:#8092a1}.search-box input{border:0;outline:0;width:100%;font:12px 'DM Sans';color:#17344c}.results-list{max-height:410px;overflow:auto}.result-item{width:100%;display:flex;align-items:center;text-align:left;padding:12px 5px;border:0;border-bottom:1px solid #edf1f4;background:white;cursor:pointer;gap:10px}.result-item:hover,.result-item.active{background:#f4f8fb}.result-icon{width:34px;height:34px;border-radius:7px;background:#edf3f7;display:grid;place-items:center;color:#315c78}.result-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}.result-copy strong{font-size:11px;color:#253f54}.result-copy small{font-size:9px;color:#8997a4}.booth-code{font-size:10px;font-weight:800;color:#3e6e8b;background:#edf4f7;padding:6px;border-radius:4px}.empty,.notice{padding:18px;color:#748698;font-size:12px}.notice.error{color:#a13f3f;background:#fff3f1;border-radius:6px}.map-chip{background:#edf5f2;color:#377766;display:flex;align-items:center;gap:6px}.map-chip span{height:6px;width:6px;background:#3b9c7d;border-radius:50%}.map-shell{margin-top:18px;border:1px solid #e7edf1;border-radius:8px;padding:10px;background:#fbfcfd}.map-heading{display:flex;justify-content:space-between;padding:5px 5px 10px;font-size:8px;font-weight:800;letter-spacing:.1em;color:#8292a0}.map-legend{font-weight:500;letter-spacing:0}.floor-map{display:block;width:100%;height:auto}.floor-map g{cursor:pointer;outline:none}.floor-map g:focus rect{stroke:#2563eb;stroke-width:4}.destination-card,.route-card{margin-top:12px;padding:13px;background:#f3f7fa;border-radius:7px;display:flex;justify-content:space-between;align-items:center;gap:12px}.destination-card>div{display:flex;flex-direction:column;gap:5px}.destination-card small{font-size:8px;letter-spacing:.1em;color:#748b9d;font-weight:800}.destination-card strong{font-size:12px}.destination-card span{font-size:10px;color:#748698}.destination-card button{border:0;border-radius:5px;background:#173d5d;color:#fff;padding:10px;font-size:10px;display:flex;gap:7px;align-items:center;cursor:pointer}.route-card{display:block;background:#edf6f3}.route-card>div:first-child{display:flex;align-items:center;gap:8px;color:#286e5b;font-size:11px}.route-card p{font-size:10px;color:#536f68;overflow-wrap:anywhere}.route-metrics{display:flex;gap:25px}.route-metrics span{font-size:9px;color:#74877f}.route-metrics strong{font-size:13px;color:#286e5b}.route-card>small{display:block;margin-top:9px;color:#7a8c84;font-size:9px}.features{background:#f5f8fa;padding:75px max(calc((100vw - 1152px)/2),5vw)}.features h2{font-size:42px;margin:15px 0 35px}.feature-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.feature-grid article{background:#fff;border:1px solid #e9eef2;border-radius:9px;padding:22px}.feature-grid article>svg{color:#3c7391}.feature-grid h3{font:700 13px Manrope;color:#203e56}.feature-grid p{font-size:10px;line-height:1.7;color:#81909d}footer{padding:28px max(calc((100vw - 1152px)/2),5vw);display:flex;justify-content:space-between;align-items:center}footer>span{font-size:9px;color:#8a98a5}
+@media(max-width:800px){.topbar{padding:0 18px}.topbar nav{display:none}.hero{grid-template-columns:1fr;padding:60px 22px 45px;gap:35px}.hero-art{height:300px}.stats{margin:0 20px;padding:22px 0;grid-template-columns:repeat(2,1fr);gap:20px}.stats div{padding-left:15px}.stats div:nth-child(3){padding-left:0}.stats div:nth-child(2){border:0}.explorer-grid{grid-template-columns:1fr}.section-heading{align-items:start;flex-direction:column;gap:15px}.feature-grid{grid-template-columns:repeat(2,1fr)}.features{padding:60px 22px}footer{padding:25px 20px;gap:20px;align-items:start;flex-direction:column}}
+@media(max-width:440px){.hero h1{font-size:48px}.hero-meta{flex-direction:column;gap:10px}.feature-grid{grid-template-columns:1fr}.section{padding:60px 15px}.directory-panel,.map-panel{padding:13px}.event-status{display:none!important}.art-card-front{left:15px}.art-card-back{right:10px}.floating-pin{right:25px}}
+
+.admin-link{border:0;background:transparent;cursor:pointer;display:flex;align-items:center;gap:7px;font:600 12px 'DM Sans';}
+.admin-panel{max-width:1152px;margin:18px auto;padding:24px;border:1px solid #dfe8ee;border-radius:12px;background:#fbfdfe;box-shadow:0 15px 40px #173d5d12}
+.admin-panel-head{display:flex;justify-content:space-between;align-items:center}.admin-panel-head h2{font:800 25px Manrope;margin:8px 0 18px;color:#153650}.icon-button{border:0;background:#edf3f7;padding:8px;border-radius:7px;cursor:pointer;color:#355b75}
+.admin-login{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end}.admin-login label{font-size:10px;color:#62778a;display:grid;gap:6px}.admin-login input,.admin-add input{border:1px solid #dce5eb;border-radius:6px;padding:12px;font:12px 'DM Sans';min-width:0}.admin-login small{grid-column:1/-1;color:#9a8051;font-size:10px}
+.admin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0 20px}.admin-stats div{background:#edf4f7;padding:15px;border-radius:7px;display:flex;flex-direction:column;gap:5px}.admin-stats strong{font:800 22px Manrope;color:#1b4968}.admin-stats span{font-size:10px;color:#75899a;text-transform:capitalize}
+.admin-add{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.admin-add h3{width:100%;font:700 13px Manrope;display:flex;align-items:center;gap:7px}.admin-add input{flex:1}.logout-button{margin-top:16px;border:1px solid #dce5eb;background:#fff;padding:9px 13px;border-radius:5px;color:#53697b;cursor:pointer;font-size:11px}
+.qr-preview{display:flex;align-items:center;gap:14px;margin-top:12px;padding:12px;background:#f6f8fa;border-radius:7px;font-size:10px;color:#62778a}.qr-preview img{width:110px;height:110px}.qr-preview a{color:#1b5b7d;font-weight:700}
+@media(max-width:700px){.admin-panel{margin:12px}.admin-login{grid-template-columns:1fr}.admin-stats{grid-template-columns:repeat(2,1fr)}.admin-add{align-items:stretch;flex-direction:column}.admin-add input{width:100%}.qr-preview{flex-wrap:wrap}}
+
+.venue-layout-section{max-width:1152px;margin:0 auto;padding:70px 24px 84px}
+.source-tag{white-space:nowrap}
+.layout-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:24px 0 12px;flex-wrap:wrap}
+.layout-tabs,.zoom-controls{display:flex;align-items:center;gap:5px;background:#f1f5f7;padding:5px;border-radius:8px}
+.layout-tabs button,.zoom-controls button{border:0;background:transparent;color:#64798a;padding:10px 12px;border-radius:6px;display:flex;align-items:center;gap:7px;cursor:pointer;font:600 11px 'DM Sans'}
+.layout-tabs button.selected{background:#fff;color:#174665;box-shadow:0 1px 5px #173d5d16}
+.zoom-controls{gap:2px}.zoom-controls button{padding:9px}.zoom-controls span{font-size:10px;min-width:42px;text-align:center;color:#456174;font-weight:700}
+.layout-image-frame{height:min(72vh,720px);min-height:360px;overflow:auto;border:1px solid #dce5ea;border-radius:10px;background:#eef1f3;display:flex;align-items:flex-start;justify-content:center;padding:14px;overscroll-behavior:contain}
+.layout-image-inner{transform-origin:top center;transition:transform .15s ease;flex:0 0 auto;width:min(100%,1000px)}
+.layout-image-inner img{display:block;width:100%;height:auto;box-shadow:0 4px 22px #172d3c20;background:#fff}
+.layout-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:14px}
+.layout-facts div{background:#f2f6f8;border:1px solid #e7edf0;border-radius:7px;padding:13px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.layout-facts strong{font:800 17px Manrope;color:#174665}.layout-facts span{font:500 10px 'DM Sans';color:#718596;line-height:1.4}
+.layout-info-toggle{margin-top:15px;display:flex;align-items:center;gap:7px;background:transparent;border:0;color:#315e79;font:600 11px 'DM Sans';cursor:pointer;padding:5px 0}
+.layout-source-note{font:400 11px/1.7 'DM Sans';color:#748695;max-width:900px;margin:6px 0 0}
+@media(max-width:700px){.venue-layout-section{padding:48px 16px}.layout-image-frame{height:58vh;min-height:300px;padding:8px}.layout-image-inner{width:900px;max-width:none}.layout-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.layout-facts div:last-child{grid-column:1/-1}.layout-toolbar{align-items:flex-start}.layout-tabs button{font-size:10px;padding:9px 8px}}
+
+.stall-explorer{max-width:1152px;margin:0 auto;padding:62px 24px 76px;border-top:1px solid #e9eef1}
+.stall-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:22px 0 16px}
+.stall-summary div{padding:15px;background:#f1f6f8;border:1px solid #e5edf1;border-radius:7px;display:flex;flex-direction:column;gap:4px}
+.stall-summary strong{font:800 21px Manrope;color:#194c6b}.stall-summary span{font:500 10px 'DM Sans';color:#738798}
+.stall-directory{border:1px solid #dfe8ed;border-radius:9px;padding:15px;background:#fff}
+.stall-search-row{display:grid;grid-template-columns:1fr;gap:10px}
+.tier-select{display:flex;align-items:center;gap:8px;border:1px solid #dce5eb;border-radius:6px;padding:0 10px;color:#718596}
+.tier-select select{border:0;background:transparent;outline:0;flex:1;min-width:0;padding:12px 0;font:600 11px 'DM Sans';color:#34566c}
+.stall-result-head{display:flex;justify-content:space-between;gap:10px;margin:17px 0 10px;font:500 10px 'DM Sans';color:#8091a0}
+.stall-result-head strong{color:#234b65}
+.stall-number-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px;max-height:420px;overflow:auto;padding:2px}
+.stall-number{border:1px solid #d7e0e6;background:#fbfcfd;border-radius:4px;padding:8px 2px;color:#34566b;font:700 10px 'DM Sans';cursor:pointer}
+.stall-number:hover,.stall-number.active{background:#e9f2f7;border-color:#477b99;color:#153d58;box-shadow:0 0 0 1px #477b99}
+.stall-empty{grid-column:1/-1;text-align:center;padding:30px;color:#8091a0;font-size:12px}
+.stall-detail{display:flex;align-items:center;gap:13px;padding:14px;margin-top:12px;border:1px solid #dfe8ed;border-radius:8px;background:#f9fbfc}
+.stall-detail-icon{width:42px;height:42px;border-radius:7px;display:grid;place-items:center;color:#234b65}
+.stall-detail-copy{display:flex;flex:1;flex-direction:column;gap:3px}.stall-detail-copy small{font-size:9px;letter-spacing:.1em;color:#8193a1}.stall-detail-copy strong{font:800 15px Manrope;color:#1d4865}.stall-detail-copy span{font:500 10px 'DM Sans';color:#647d8e}.stall-detail-copy em{font:500 10px 'DM Sans';font-style:normal;color:#a17634;display:flex;align-items:center;gap:4px;margin-top:3px}
+@media(max-width:700px){.stall-explorer{padding:45px 16px}.stall-summary{grid-template-columns:repeat(2,1fr)}.stall-search-row{grid-template-columns:1fr}.stall-number-grid{grid-template-columns:repeat(7,minmax(0,1fr));max-height:360px}.stall-number{padding:10px 1px}}
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\types.ts ==========
+export type EventInfo = { id: string; name: string; description: string; venue: string; is_demo: boolean }
+export type Exhibitor = { id: string; name: string; category: string; description: string; website: string }
+export type Booth = { id: string; code: string; x: number; y: number; width: number; height: number; exhibitor: Exhibitor | null }
+export type RouteResult = { nodes: string[]; distance_m: number; walking_minutes: number; message: string }
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\components\FloorMap.tsx ==========
+import type { Booth } from '../types'
+
+type Props = { booths: Booth[]; selectedId: string | null; onSelect: (booth: Booth) => void }
+
+export default function FloorMap({ booths, selectedId, onSelect }: Props) {
+  return (
+    <div className="map-shell">
+      <div className="map-heading"><span>HALL 1 · SAMPLE FLOOR PLAN</span><span className="map-legend">■ Booths&nbsp;&nbsp; ─ Walkways</span></div>
+      <svg viewBox="0 0 700 470" role="img" aria-label="Illustrative sample exhibition floor map with entrance at bottom-left" className="floor-map">
+        <rect x="12" y="12" width="676" height="446" rx="18" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2"/>
+        <rect x="35" y="205" width="630" height="75" rx="10" fill="#e2e8f0"/>
+        <text x="350" y="248" textAnchor="middle" fill="#64748b" fontSize="16" fontWeight="700">MAIN WALKWAY</text>
+        <rect x="25" y="365" width="150" height="48" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="100" y="394" textAnchor="middle" fill="#1e40af" fontSize="13">MAIN ENTRANCE</text>
+        {booths.map((booth) => (
+          <g key={booth.id} onClick={() => onSelect(booth)} onKeyDown={(e) => e.key === 'Enter' && onSelect(booth)} tabIndex={0} role="button" aria-label={`Select booth ${booth.code}`}>
+            <rect x={booth.x} y={booth.y} width={booth.width} height={booth.height}
+              rx="7" fill={selectedId === booth.id ? '#bfdbfe' : '#ffffff'}
+              stroke={selectedId === booth.id ? '#2563eb' : '#94a3b8'} strokeWidth={selectedId === booth.id ? 3 : 1.5}/>
+            <text x={booth.x + booth.width / 2} y={booth.y + 25} textAnchor="middle" fill="#0f172a" fontSize="13" fontWeight="700">{booth.code}</text>
+            <text x={booth.x + booth.width / 2} y={booth.y + 43} textAnchor="middle" fill="#64748b" fontSize="9">{(booth.exhibitor?.name || 'Available').slice(0, 17)}</text>
+          </g>
+        ))}
+        <text x="350" y="430" textAnchor="middle" fill="#64748b" fontSize="12">Illustrative layout · Not an official IRC venue plan</text>
+      </svg>
+    </div>
+  )
+}
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\components\StallExplorer.tsx ==========
+import { useMemo, useState } from 'react'
+import { Search, MapPin, Info, X, CircleHelp } from 'lucide-react'
+
+type Stall = { number: number; status: 'Unverified' }
+
+// Current organiser-confirmed count. The older 30-Oct reference drawing showed 401.
+const CURRENT_STALL_COUNT = 341
+const stalls: Stall[] = Array.from({ length: CURRENT_STALL_COUNT }, (_, i) => ({ number: i + 1, status: 'Unverified' }))
+
+export default function StallExplorer() {
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Stall | null>(null)
+  const [statusInfo, setStatusInfo] = useState(true)
+
+  const filtered = useMemo(() => stalls.filter(stall =>
+    String(stall.number).includes(search.trim())
+  ), [search])
+
+  return (
+    <section className="stall-explorer" id="stall-explorer">
+      <div className="section-heading">
+        <div>
+          <div className="eyebrow">STALL DIRECTORY</div>
+          <h2>Find a stall</h2>
+          <p>Search the currently confirmed directory of 341 exhibition stalls.</p>
+        </div>
+        <span className="sample-tag">CURRENT COUNT · ORGANISER CONFIRMATION</span>
+      </div>
+
+      <div className="stall-summary">
+        <div><strong>{CURRENT_STALL_COUNT}</strong><span>Confirmed total stalls</span></div>
+        <div><strong>—</strong><span>Platinum · awaiting revised register</span></div>
+        <div><strong>—</strong><span>Gold · awaiting revised register</span></div>
+        <div><strong>—</strong><span>Silver · awaiting revised register</span></div>
+      </div>
+
+      <div className="stall-directory">
+        <div className="stall-search-row">
+          <label className="search-box"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Enter stall number (e.g. 108)" inputMode="numeric"/></label>
+        </div>
+        <div className="stall-result-head"><strong>{filtered.length} stalls</strong><span>Choose a number to inspect its directory entry</span></div>
+        <div className="stall-number-grid">
+          {filtered.map(stall => (
+            <button key={stall.number} className={`stall-number ${selected?.number === stall.number ? 'active' : ''}`}
+              onClick={() => setSelected(stall)} aria-pressed={selected?.number === stall.number}>
+              {stall.number}
+            </button>
+          ))}
+          {filtered.length === 0 && <div className="stall-empty">No stall number matches this search. Current directory range is 1–341.</div>}
+        </div>
+      </div>
+
+      {selected && <div className="stall-detail">
+        <div className="stall-detail-icon"><MapPin size={21}/></div>
+        <div className="stall-detail-copy">
+          <small>SELECTED STALL</small><strong>Stall {selected.number}</strong>
+          <span>Exhibitor name, category, booth position and allocation status have not yet been matched to the approved current register.</span>
+          <em><CircleHelp size={13}/> Directory number only — details pending organiser data.</em>
+        </div>
+        <button className="icon-button" onClick={()=>setSelected(null)} aria-label="Close stall details"><X size={17}/></button>
+      </div>}
+
+      <button className="layout-info-toggle" onClick={()=>setStatusInfo(v=>!v)}><Info size={15}/>{statusInfo?'Hide':'Show'} register limitations</button>
+      {statusInfo && <p className="layout-source-note">
+        The current organiser-confirmed total is 341 stalls. The older source drawing dated 30 October 2026 depicts 401 stalls and its Platinum, Gold and Silver totals add up to 401; those figures are therefore not carried into this revised directory. The current numbering range is provisionally represented as 1–341. Individual stall numbers, exhibitor assignments, categories, physical positions and allocation status must be checked against the latest approved register before operational use.
+      </p>}
+    </section>
+  )
+}
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\frontend\src\components\VenueLayouts.tsx ==========
+import { useState } from 'react'
+import { ZoomIn, ZoomOut, RotateCcw, Map, LayoutGrid, Info } from 'lucide-react'
+
+type LayoutTab = 'venue' | 'stalls'
+
+export default function VenueLayouts() {
+  const [tab, setTab] = useState<LayoutTab>('stalls')
+  const [zoom, setZoom] = useState(1)
+  const [showInfo, setShowInfo] = useState(true)
+
+  const image = tab === 'stalls'
+    ? '/layouts/irc-technical-exhibition-layout.png'
+    : '/layouts/venue-overview-reference.png'
+
+  function changeTab(next: LayoutTab) {
+    setTab(next)
+    setZoom(1)
+  }
+
+  return (
+    <section className="venue-layout-section" id="venue-layouts">
+      <div className="section-heading">
+        <div>
+          <div className="eyebrow">SOURCE VENUE DRAWINGS</div>
+          <h2>Explore the actual layouts</h2>
+          <p>Reference drawings supplied for the 85th IRC exhibition. Use zoom to inspect the hall and stall plan.</p>
+        </div>
+        <span className="sample-tag source-tag">REFERENCE DRAWING · SUPERSEDED COUNT</span>
+      </div>
+
+      <div className="layout-toolbar">
+        <div className="layout-tabs" role="tablist" aria-label="Exhibition layout">
+          <button className={tab === 'stalls' ? 'selected' : ''} onClick={() => changeTab('stalls')} role="tab" aria-selected={tab === 'stalls'}>
+            <LayoutGrid size={16}/> Stall availability
+          </button>
+          <button className={tab === 'venue' ? 'selected' : ''} onClick={() => changeTab('venue')} role="tab" aria-selected={tab === 'venue'}>
+            <Map size={16}/> Venue overview
+          </button>
+        </div>
+        <div className="zoom-controls">
+          <button aria-label="Zoom out" onClick={() => setZoom(v => Math.max(.65, +(v - .15).toFixed(2)))}><ZoomOut size={17}/></button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button aria-label="Zoom in" onClick={() => setZoom(v => Math.min(2.5, +(v + .15).toFixed(2)))}><ZoomIn size={17}/></button>
+          <button aria-label="Reset zoom" onClick={() => setZoom(1)}><RotateCcw size={15}/></button>
+        </div>
+      </div>
+
+      <div className="layout-image-frame">
+        <div className="layout-image-inner" style={{ transform: `scale(${zoom})` }}>
+          <img src={image} alt={tab === 'stalls'
+            ? 'P.V. Narasimha Rao Technical Exhibition Hall stall availability layout dated 30 October 2026'
+            : 'Venue overview showing P.V. Narasimha Rao halls, hangars, store, kitchen, toilet block and Gate 3'} />
+        </div>
+      </div>
+
+      {tab === 'stalls' ? (
+        <div className="layout-facts">
+          <div><strong>341</strong><span>Current confirmed total</span></div>
+          <div><strong>—</strong><span>Platinum · pending revised register</span></div>
+          <div><strong>—</strong><span>Gold · pending revised register</span></div>
+          <div><strong>—</strong><span>Silver · pending revised register</span></div>
+          <div><strong>18m × 6m</strong><span>Theme Pavilion · Ramappa Temple</span></div>
+        </div>
+      ) : (
+        <div className="layout-facts venue-facts">
+          <div><strong>8B</strong><span>Hangar · 50m × 70m</span></div>
+          <div><strong>8A</strong><span>Hall · 48m × 72m</span></div>
+          <div><strong>17</strong><span>Store · 50m × 30m</span></div>
+          <div><strong>14A</strong><span>Kitchen Area-1 · 9m × 50m</span></div>
+          <div><strong>20m × 5m</strong><span>Toilet block · M/F</span></div>
+        </div>
+      )}
+
+      <button className="layout-info-toggle" onClick={() => setShowInfo(v => !v)}>
+        <Info size={15}/> {showInfo ? 'Hide' : 'Show'} layout notes
+      </button>
+      {showInfo && <p className="layout-source-note">
+        The supplied 30 October 2026 stall drawing is retained as a historical visual reference and depicts 401 stalls. The currently confirmed total is 341, so the drawing must not be treated as the current stall register or allocation plan. The venue overview is a supplied screenshot reference. Interactive stall positions, current entry orientation, live availability and route overlays still require alignment against the latest approved plan.
+      </p>}
+    </section>
+  )
+}
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\backend\app\database.py ==========
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from app.core.config import settings
+
+class Base(DeclarativeBase):
+    pass
+
+engine = create_engine(settings.database_url, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\backend\app\main.py ==========
+import heapq, io, uuid, csv
+from collections import Counter
+from fastapi import FastAPI, Depends, HTTPException, Query, Response, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select, or_, func
+from app.core.config import settings
+from app.database import Base, engine, get_db
+from app.models import Event, Exhibitor, Hall, Booth, NavigationNode, NavigationEdge, QRCodeRecord, AnalyticsEvent, Facility
+from app.schemas import ExhibitorOut, BoothOut, RouteRequest, RouteResponse, LoginRequest, TokenResponse, ExhibitorCreate, HallCreate, BoothUpdate, FacilityCreate, NavigationNodeCreate, NavigationEdgeCreate
+from app.seed import seed_demo
+from app.security import verify_password, create_access_token, require_admin
+import qrcode
+
+app = FastAPI(title="IRC EXHIBITION FINDER API", version="0.2.0", description="Exhibition discovery and navigation platform")
+app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("startup")
+def startup():
+    # Development bootstrap. Use Alembic migrations before production.
+    Base.metadata.create_all(bind=engine)
+    with Session(engine) as db:
+        seed_demo(db)
+        db.commit()
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "irc-exhibition-finder-api"}
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    from app.models import AdminUser
+    user = db.query(AdminUser).filter_by(username=payload.username, is_active=True).first()
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    return TokenResponse(access_token=create_access_token(user.username))
+
+@app.get("/api/auth/me")
+def auth_me(admin=Depends(require_admin)):
+    return {"username": admin.username, "role": "admin"}
+
+@app.get("/api/events")
+def list_events(db: Session = Depends(get_db)):
+    return [{"id": e.id, "name": e.name, "venue": e.venue, "is_demo": e.is_demo} for e in db.scalars(select(Event).order_by(Event.name)).all()]
+
+@app.get("/api/events/{event_id}")
+def get_event(event_id: str, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return {"id": event.id, "name": event.name, "description": event.description, "venue": event.venue, "is_demo": event.is_demo}
+
+@app.get("/api/events/{event_id}/exhibitors", response_model=list[ExhibitorOut])
+def list_exhibitors(event_id: str, q: str | None = Query(default=None), db: Session = Depends(get_db)):
+    if not db.get(Event, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    stmt = select(Exhibitor).where(Exhibitor.event_id == event_id)
+    if q:
+        term = f"%{q.strip()}%"
+        stmt = stmt.where(or_(Exhibitor.name.ilike(term), Exhibitor.category.ilike(term), Exhibitor.description.ilike(term)))
+    return list(db.scalars(stmt.order_by(Exhibitor.name)).all())
+
+@app.post("/api/admin/exhibitors", response_model=ExhibitorOut)
+def create_exhibitor(payload: ExhibitorCreate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Event, payload.event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    if db.get(Exhibitor, payload.id):
+        raise HTTPException(status_code=409, detail="Exhibitor ID already exists")
+    item = Exhibitor(**payload.model_dump())
+    db.add(item); db.commit(); db.refresh(item)
+    return item
+
+@app.put("/api/admin/exhibitors/{exhibitor_id}", response_model=ExhibitorOut)
+def update_exhibitor(exhibitor_id: str, payload: ExhibitorCreate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    item = db.get(Exhibitor, exhibitor_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    for key, value in payload.model_dump().items():
+        if key != "id":
+            setattr(item, key, value)
+    db.commit(); db.refresh(item)
+    return item
+
+@app.delete("/api/admin/exhibitors/{exhibitor_id}")
+def delete_exhibitor(exhibitor_id: str, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    item = db.get(Exhibitor, exhibitor_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    db.delete(item); db.commit()
+    return {"deleted": exhibitor_id}
+
+@app.get("/api/halls/{hall_id}/booths", response_model=list[BoothOut])
+def list_booths(hall_id: str, db: Session = Depends(get_db)):
+    if not db.get(Hall, hall_id):
+        raise HTTPException(status_code=404, detail="Hall not found")
+    stmt = select(Booth).options(joinedload(Booth.exhibitor)).where(Booth.hall_id == hall_id).order_by(Booth.code)
+    return list(db.scalars(stmt).unique().all())
+
+@app.post("/api/navigation/route", response_model=RouteResponse)
+def calculate_route(payload: RouteRequest, db: Session = Depends(get_db)):
+    nodes = {n.id for n in db.scalars(select(NavigationNode)).all()}
+    if payload.start_node not in nodes or payload.destination_node not in nodes:
+        raise HTTPException(status_code=404, detail="Starting point or destination was not found")
+    edges = db.scalars(select(NavigationEdge).where(NavigationEdge.is_blocked == False)).all()
+    graph = {}
+    for edge in edges:
+        graph.setdefault(edge.from_node, []).append((edge.to_node, edge.distance_m))
+        graph.setdefault(edge.to_node, []).append((edge.from_node, edge.distance_m))
+    queue = [(0.0, payload.start_node, [payload.start_node])]
+    best = {}
+    while queue:
+        distance, node, path = heapq.heappop(queue)
+        if node in best and best[node] <= distance: continue
+        best[node] = distance
+        if node == payload.destination_node:
+            return RouteResponse(nodes=path, distance_m=round(distance, 2), walking_minutes=round(distance / 75, 1),
+                message="Route calculated from the configured demonstration navigation graph.")
+        for neighbour, weight in graph.get(node, []):
+            if neighbour not in best: heapq.heappush(queue, (distance + weight, neighbour, path + [neighbour]))
+    raise HTTPException(status_code=404, detail="No walkable route exists between these locations")
+
+@app.post("/api/qr/generate")
+def generate_qr(payload: dict, db: Session = Depends(get_db)):
+    event_id = str(payload.get("event_id", ""))
+    destination_id = str(payload.get("destination_id", ""))
+    label = str(payload.get("destination_label", destination_id))
+    if not db.get(Event, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    record_id = uuid.uuid4().hex[:16]
+    db.add(QRCodeRecord(id=record_id, event_id=event_id, destination_id=destination_id, destination_label=label))
+    db.add(AnalyticsEvent(event_id=event_id, event_type="qr_generated", entity_id=destination_id))
+    db.commit()
+    url = f"{settings.allowed_origins[0]}/?event={event_id}&destination={destination_id}" if settings.allowed_origins else f"http://localhost:5173/?event={event_id}&destination={destination_id}"
+    image = qrcode.make(url)
+    buffer = io.BytesIO(); image.save(buffer, format="PNG")
+    return Response(content=buffer.getvalue(), media_type="image/png", headers={"X-QR-ID": record_id})
+
+@app.post("/api/analytics/track")
+def track_analytics(payload: dict, db: Session = Depends(get_db)):
+    event_id = str(payload.get("event_id", ""))
+    if not db.get(Event, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    db.add(AnalyticsEvent(event_id=event_id, event_type=str(payload.get("event_type", "interaction"))[:60],
+        entity_id=payload.get("entity_id"), query_text=payload.get("query_text")))
+    db.commit()
+    return {"recorded": True}
+
+@app.get("/api/admin/analytics")
+def admin_analytics(event_id: str = "demo-irc-expo", db: Session = Depends(get_db), admin=Depends(require_admin)):
+    rows = db.scalars(select(AnalyticsEvent).where(AnalyticsEvent.event_id == event_id)).all()
+    counts = Counter(row.event_type for row in rows)
+    return {"total_events": len(rows), "by_type": dict(counts)}
+
+@app.get("/api/admin/dashboard")
+def admin_dashboard(db: Session = Depends(get_db), admin=Depends(require_admin)):
+    return {
+        "events": db.scalar(select(func.count()).select_from(Event)) or 0,
+        "exhibitors": db.scalar(select(func.count()).select_from(Exhibitor)) or 0,
+        "halls": db.scalar(select(func.count()).select_from(Hall)) or 0,
+        "booths": db.scalar(select(func.count()).select_from(Booth)) or 0,
+    }
+
+@app.post("/api/admin/import-exhibitors")
+async def import_exhibitors(file: UploadFile = File(...), event_id: str = Query(...), db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Event, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload a CSV file")
+    content = (await file.read()).decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+    required = {"id", "name"}
+    if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
+        raise HTTPException(status_code=400, detail="CSV requires id and name columns")
+    created = 0
+    for row in reader:
+        if not row.get("id") or not row.get("name"): continue
+        if db.get(Exhibitor, row["id"]): continue
+        db.add(Exhibitor(id=row["id"], event_id=event_id, name=row["name"],
+            category=row.get("category") or "General", description=row.get("description") or "",
+            website=row.get("website") or ""))
+        created += 1
+    db.commit()
+    return {"created": created}
+
+
+
+@app.get("/api/events/{event_id}/halls")
+def list_halls(event_id: str, db: Session = Depends(get_db)):
+    if not db.get(Event, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    return [{"id": h.id, "name": h.name, "map_key": h.map_key} for h in db.scalars(select(Hall).where(Hall.event_id == event_id).order_by(Hall.name)).all()]
+
+@app.post("/api/admin/halls")
+def create_hall(payload: HallCreate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Event, payload.event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    if db.get(Hall, payload.id):
+        raise HTTPException(status_code=409, detail="Hall ID already exists")
+    hall = Hall(**payload.model_dump())
+    db.add(hall); db.commit()
+    return {"id": hall.id, "name": hall.name, "map_key": hall.map_key}
+
+@app.put("/api/admin/booths/{booth_id}", response_model=BoothOut)
+def update_booth(booth_id: str, payload: BoothUpdate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    booth = db.get(Booth, booth_id)
+    if not booth:
+        raise HTTPException(status_code=404, detail="Booth not found")
+    if payload.exhibitor_id and not db.get(Exhibitor, payload.exhibitor_id):
+        raise HTTPException(status_code=404, detail="Exhibitor not found")
+    for key, value in payload.model_dump().items():
+        setattr(booth, key, value)
+    db.commit()
+    return db.scalar(select(Booth).options(joinedload(Booth.exhibitor)).where(Booth.id == booth_id))
+
+@app.get("/api/halls/{hall_id}/facilities")
+def list_facilities(hall_id: str, db: Session = Depends(get_db)):
+    if not db.get(Hall, hall_id):
+        raise HTTPException(status_code=404, detail="Hall not found")
+    return [{"id": f.id, "name": f.name, "facility_type": f.facility_type, "x": f.x, "y": f.y}
+            for f in db.scalars(select(Facility).where(Facility.hall_id == hall_id)).all()]
+
+@app.post("/api/admin/facilities")
+def create_facility(payload: FacilityCreate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Hall, payload.hall_id):
+        raise HTTPException(status_code=404, detail="Hall not found")
+    if db.get(Facility, payload.id):
+        raise HTTPException(status_code=409, detail="Facility ID already exists")
+    facility = Facility(**payload.model_dump())
+    db.add(facility); db.commit()
+    return {"id": facility.id, "name": facility.name, "facility_type": facility.facility_type}
+
+@app.delete("/api/admin/facilities/{facility_id}")
+def delete_facility(facility_id: str, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    facility = db.get(Facility, facility_id)
+    if not facility:
+        raise HTTPException(status_code=404, detail="Facility not found")
+    db.delete(facility); db.commit()
+    return {"deleted": facility_id}
+
+@app.get("/api/admin/navigation/{hall_id}")
+def get_navigation_graph(hall_id: str, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Hall, hall_id):
+        raise HTTPException(status_code=404, detail="Hall not found")
+    nodes = db.scalars(select(NavigationNode).where(NavigationNode.hall_id == hall_id)).all()
+    edges = db.scalars(select(NavigationEdge).where(NavigationEdge.hall_id == hall_id)).all()
+    return {
+        "nodes": [{"id": n.id, "label": n.label, "node_type": n.node_type, "x": n.x, "y": n.y} for n in nodes],
+        "edges": [{"id": e.id, "from_node": e.from_node, "to_node": e.to_node, "distance_m": e.distance_m, "is_accessible": e.is_accessible, "is_blocked": e.is_blocked} for e in edges]
+    }
+
+@app.post("/api/admin/navigation/nodes")
+def create_navigation_node(payload: NavigationNodeCreate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Hall, payload.hall_id):
+        raise HTTPException(status_code=404, detail="Hall not found")
+    if db.get(NavigationNode, payload.id):
+        raise HTTPException(status_code=409, detail="Node ID already exists")
+    node = NavigationNode(**payload.model_dump())
+    db.add(node); db.commit()
+    return {"id": node.id, "label": node.label}
+
+@app.post("/api/admin/navigation/edges")
+def create_navigation_edge(payload: NavigationEdgeCreate, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    if not db.get(Hall, payload.hall_id):
+        raise HTTPException(status_code=404, detail="Hall not found")
+    for node_id in (payload.from_node, payload.to_node):
+        node = db.get(NavigationNode, node_id)
+        if not node or node.hall_id != payload.hall_id:
+            raise HTTPException(status_code=400, detail=f"Node {node_id} is not in this hall")
+    edge = NavigationEdge(**payload.model_dump())
+    db.add(edge); db.commit()
+    return {"id": edge.id, "distance_m": edge.distance_m}
+
+@app.patch("/api/admin/navigation/edges/{edge_id}/block")
+def set_edge_blocked(edge_id: int, blocked: bool = Query(...), db: Session = Depends(get_db), admin=Depends(require_admin)):
+    edge = db.get(NavigationEdge, edge_id)
+    if not edge:
+        raise HTTPException(status_code=404, detail="Navigation edge not found")
+    edge.is_blocked = blocked
+    db.commit()
+    return {"id": edge.id, "is_blocked": edge.is_blocked}
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\backend\app\models.py ==========
+from datetime import datetime, timezone
+from sqlalchemy import String, Text, Float, ForeignKey, Boolean, DateTime, Integer, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.database import Base
+
+def now_utc():
+    return datetime.now(timezone.utc)
+
+class Event(Base):
+    __tablename__ = "events"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    venue: Mapped[str] = mapped_column(String(200), default="")
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    exhibitors: Mapped[list["Exhibitor"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+    halls: Mapped[list["Hall"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+
+class Hall(Base):
+    __tablename__ = "halls"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    map_key: Mapped[str] = mapped_column(String(100), default="sample-hall")
+    event: Mapped[Event] = relationship(back_populates="halls")
+    booths: Mapped[list["Booth"]] = relationship(back_populates="hall", cascade="all, delete-orphan")
+
+class Exhibitor(Base):
+    __tablename__ = "exhibitors"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(120), default="General")
+    description: Mapped[str] = mapped_column(Text, default="")
+    website: Mapped[str] = mapped_column(String(300), default="")
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    event: Mapped[Event] = relationship(back_populates="exhibitors")
+    booth: Mapped["Booth | None"] = relationship(back_populates="exhibitor", uselist=False)
+
+class Booth(Base):
+    __tablename__ = "booths"
+    __table_args__ = (UniqueConstraint("hall_id", "code", name="uq_booth_hall_code"),)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    hall_id: Mapped[str] = mapped_column(ForeignKey("halls.id"), nullable=False, index=True)
+    exhibitor_id: Mapped[str | None] = mapped_column(ForeignKey("exhibitors.id"), unique=True)
+    code: Mapped[str] = mapped_column(String(30), nullable=False)
+    x: Mapped[float] = mapped_column(Float, default=0)
+    y: Mapped[float] = mapped_column(Float, default=0)
+    width: Mapped[float] = mapped_column(Float, default=100)
+    height: Mapped[float] = mapped_column(Float, default=60)
+    hall: Mapped[Hall] = relationship(back_populates="booths")
+    exhibitor: Mapped[Exhibitor | None] = relationship(back_populates="booth")
+
+class NavigationNode(Base):
+    __tablename__ = "navigation_nodes"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    hall_id: Mapped[str] = mapped_column(ForeignKey("halls.id"), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    node_type: Mapped[str] = mapped_column(String(40), default="junction")
+    x: Mapped[float] = mapped_column(Float, default=0)
+    y: Mapped[float] = mapped_column(Float, default=0)
+
+class NavigationEdge(Base):
+    __tablename__ = "navigation_edges"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hall_id: Mapped[str] = mapped_column(ForeignKey("halls.id"), nullable=False, index=True)
+    from_node: Mapped[str] = mapped_column(ForeignKey("navigation_nodes.id"), nullable=False)
+    to_node: Mapped[str] = mapped_column(ForeignKey("navigation_nodes.id"), nullable=False)
+    distance_m: Mapped[float] = mapped_column(Float, nullable=False)
+    is_accessible: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class QRCodeRecord(Base):
+    __tablename__ = "qr_codes"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    destination_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    destination_label: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+class AnalyticsEvent(Base):
+    __tablename__ = "analytics_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(64))
+    query_text: Mapped[str | None] = mapped_column(String(250))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Facility(Base):
+    __tablename__ = "facilities"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    hall_id: Mapped[str] = mapped_column(ForeignKey("halls.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(140), nullable=False)
+    facility_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    x: Mapped[float] = mapped_column(Float, default=0)
+    y: Mapped[float] = mapped_column(Float, default=0)
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\backend\app\schemas.py ==========
+from pydantic import BaseModel, ConfigDict, Field
+
+class ExhibitorOut(BaseModel):
+    id: str
+    name: str
+    category: str
+    description: str
+    website: str
+    is_featured: bool = False
+    model_config = ConfigDict(from_attributes=True)
+
+class ExhibitorCreate(BaseModel):
+    id: str = Field(min_length=2, max_length=64)
+    event_id: str
+    name: str = Field(min_length=2, max_length=200)
+    category: str = "General"
+    description: str = ""
+    website: str = ""
+    is_featured: bool = False
+
+class BoothOut(BaseModel):
+    id: str
+    code: str
+    x: float
+    y: float
+    width: float
+    height: float
+    exhibitor: ExhibitorOut | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+class RouteRequest(BaseModel):
+    start_node: str
+    destination_node: str
+
+class RouteResponse(BaseModel):
+    nodes: list[str]
+    distance_m: float
+    walking_minutes: float
+    message: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class HallCreate(BaseModel):
+    id: str
+    event_id: str
+    name: str
+    map_key: str = "sample-hall"
+
+class BoothUpdate(BaseModel):
+    code: str
+    exhibitor_id: str | None = None
+    x: float
+    y: float
+    width: float = 100
+    height: float = 60
+
+class FacilityCreate(BaseModel):
+    id: str
+    hall_id: str
+    name: str
+    facility_type: str
+    x: float = 0
+    y: float = 0
+
+class NavigationNodeCreate(BaseModel):
+    id: str
+    hall_id: str
+    label: str
+    node_type: str = "junction"
+    x: float = 0
+    y: float = 0
+
+class NavigationEdgeCreate(BaseModel):
+    hall_id: str
+    from_node: str
+    to_node: str
+    distance_m: float = Field(gt=0)
+    is_accessible: bool = True
+    is_blocked: bool = False
+
+
+========== C:\Users\HP\Downloads\IRC-EXHIBITION-FINDER-v0.6-341-STALLS\irc-exhibition-finder\backend\app\seed.py ==========
+
+from sqlalchemy.orm import Session
+
+from app.models import (
+    Event,
+    Hall,
+    Exhibitor,
+    Booth,
+    NavigationNode,
+    NavigationEdge,
+    AdminUser,
+)
+from app.security import hash_password
+
+
+def seed_demo(db: Session) -> None:
+    # 1. Create the demo event if it does not exist.
+    event = db.get(Event, "demo-irc-expo")
+
+    if not event:
+        event = Event(
+            id="demo-irc-expo",
+            name="IRC Exhibition Finder - Sample Exhibition",
+            description=(
+                "Demonstration event with fictional exhibitors "
+                "and an illustrative floor map."
+            ),
+            venue="Sample Exhibition Venue",
+            is_demo=True,
+        )
+        db.add(event)
+        db.commit()
+
+    # 2. Create the hall independently of the event check.
+    hall = db.get(Hall, "demo-hall-1")
+
+    if not hall:
+        hall = Hall(
+            id="demo-hall-1",
+            event_id=event.id,
+            name="Sample Hall 1",
+            map_key="sample-hall-1",
+        )
+        db.add(hall)
+        db.commit()
+
+    # 3. Create demo exhibitors and booths.
+    samples = [
+        ("ex-001", "RoadTech Systems", "Road Infrastructure",
+         "Demonstration exhibitor for road construction technology.",
+         "B01", 100, 120),
+
+        ("ex-002", "BridgeWorks India", "Bridge Engineering",
+         "Demonstration exhibitor for bridge engineering.",
+         "B02", 270, 120),
+
+        ("ex-003", "SafeRoute Technologies", "Road Safety",
+         "Demonstration exhibitor for road safety solutions.",
+         "B03", 440, 120),
+
+        ("ex-004", "GreenPavement Labs", "Materials",
+         "Demonstration exhibitor for sustainable pavement materials.",
+         "B04", 100, 300),
+
+        ("ex-005", "InfraData Analytics", "Technology",
+         "Demonstration exhibitor for infrastructure data.",
+         "B05", 270, 300),
+    ]
+
+    for eid, name, category, description, code, x, y in samples:
+        exhibitor = db.get(Exhibitor, eid)
+
+        if not exhibitor:
+            exhibitor = Exhibitor(
+                id=eid,
+                event_id=event.id,
+                name=name,
+                category=category,
+                description=description,
+            )
+            db.add(exhibitor)
+
+        booth_id = f"booth-{code.lower()}"
+        booth = db.get(Booth, booth_id)
+
+        if not booth:
+            db.add(
+                Booth(
+                    id=booth_id,
+                    hall_id=hall.id,
+                    exhibitor_id=eid,
+                    code=code,
+                    x=x,
+                    y=y,
+                )
+            )
+
+    # 4. Create navigation nodes.
+    node_data = [
+        ("entrance", "Main Entrance", "entrance", 45, 420),
+        ("junction-a", "Main Junction", "junction", 350, 190),
+        ("junction-b", "North Aisle", "junction", 350, 150),
+        ("junction-c", "South Aisle", "junction", 350, 330),
+    ]
+
+    for node_id, label, node_type, x, y in node_data:
+        if not db.get(NavigationNode, node_id):
+            db.add(
+                NavigationNode(
+                    id=node_id,
+                    hall_id=hall.id,
+                    label=label,
+                    node_type=node_type,
+                    x=x,
+                    y=y,
+                )
+            )
+
+    for i in range(1, 6):
+        node_id = f"booth-b{i:02}"
+
+        if not db.get(NavigationNode, node_id):
+            db.add(
+                NavigationNode(
+                    id=node_id,
+                    hall_id=hall.id,
+                    label=f"Booth B{i:02}",
+                    node_type="booth",
+                )
+            )
+
+    # Flush nodes before creating edges that refer to them.
+    db.flush()
+
+    # 5. Create navigation edges only after the hall and nodes exist.
+    edges = [
+        ("entrance", "junction-a", 12),
+        ("junction-a", "junction-b", 18),
+        ("junction-a", "junction-c", 20),
+        ("junction-b", "booth-b01", 10),
+        ("junction-b", "booth-b02", 14),
+        ("junction-b", "booth-b03", 25),
+        ("junction-c", "booth-b04", 12),
+        ("junction-c", "booth-b05", 15),
+    ]
+
+    for from_node, to_node, distance in edges:
+        existing_edge = (
+            db.query(NavigationEdge)
+            .filter_by(
+                hall_id=hall.id,
+                from_node=from_node,
+                to_node=to_node,
+            )
+            .first()
+        )
+
+        if not existing_edge:
+            db.add(
+                NavigationEdge(
+                    hall_id=hall.id,
+                    from_node=from_node,
+                    to_node=to_node,
+                    distance_m=distance,
+                )
+            )
+
+    # 6. Create the local demo administrator if missing.
+    admin = (
+        db.query(AdminUser)
+        .filter_by(username="admin")
+        .first()
+    )
+
+    if not admin:
+        db.add(
+            AdminUser(
+                username="admin",
+                password_hash=hash_password(
+                    "ChangeMe-Immediately-123!"
+                ),
+            )
+        )
+
+    db.commit()
