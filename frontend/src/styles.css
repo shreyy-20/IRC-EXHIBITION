@@ -2565,12 +2565,17 @@ footer > span {
 .exhibitor-card {
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px 18px;
   border: 1.5px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
   cursor: pointer;
   transition: all 0.15s ease;
+  touch-action: pan-y;
+}
+
+.exhibitor-card:active {
+  transform: scale(0.985);
 }
 
 .exhibitor-card:hover {
@@ -2638,10 +2643,10 @@ footer > span {
 
 .exhibitor-company-name h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .exhibitor-meta-row {
@@ -4594,7 +4599,9 @@ footer > span {
 .directory-sidebar-pane .exhibitors-card-grid {
   flex: 1;
   overflow-y: auto;
-  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  padding-right: 6px;
 }
 
 /* MAP VIEWPORT */

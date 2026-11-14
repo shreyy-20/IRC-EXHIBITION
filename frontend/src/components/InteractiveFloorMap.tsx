@@ -5,10 +5,6 @@ import {
   ZoomOut,
   RotateCcw,
   Maximize2,
-  Move,
-  Footprints,
-  Eye,
-  EyeOff,
   Navigation2,
   Crosshair,
   Play,
@@ -115,6 +111,58 @@ function playArrivalChime() {
   }
 }
 
+// Word-wrapping and text scaling helper for exhibitor stalls
+function getWrappedLines(
+  companyName: string,
+  width: number,
+  height: number
+): { lines: string[]; fontSize: number; lineHeight: number } {
+  const words = companyName.trim().split(/\s+/);
+
+  let fontSize = 9;
+  if (width < 50 || height < 36) fontSize = 7;
+  else if (width < 70 || height < 46) fontSize = 8;
+  else if (width >= 110 && height >= 65) fontSize = 10;
+  else if (width >= 140 && height >= 80) fontSize = 11.5;
+
+  const lineHeight = fontSize * 1.25;
+  const paddingX = 6;
+  const maxCharsPerLine = Math.max(5, Math.floor((width - paddingX * 2) / (fontSize * 0.56)));
+  const maxLines = Math.max(1, Math.floor((height - 8) / lineHeight));
+
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if (!currentLine) {
+      currentLine = word;
+    } else if ((currentLine + ' ' + word).length <= maxCharsPerLine) {
+      currentLine += ' ' + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+      if (lines.length >= maxLines) break;
+    }
+  }
+
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+
+  const totalWords = words.length;
+  const packedWords = lines.join(' ').split(/\s+/).length;
+  if (packedWords < totalWords && lines.length > 0) {
+    const last = lines[lines.length - 1];
+    if (last.length > maxCharsPerLine - 2) {
+      lines[lines.length - 1] = last.substring(0, maxCharsPerLine - 3) + '…';
+    } else {
+      lines[lines.length - 1] = last + '…';
+    }
+  }
+
+  return { lines, fontSize, lineHeight };
+}
+
 export default function InteractiveFloorMap({
   exhibitors,
   selectedExhibitor,
@@ -135,7 +183,7 @@ export default function InteractiveFloorMap({
   const [dragging, setDragging] = useState(false);
   const [hoveredExhibitor, setHoveredExhibitor] = useState<ClubbedExhibitor | null>(null);
   const [hoveredPathway, setHoveredPathway] = useState<FloorPathway | null>(null);
-  const [showAisleLabels, setShowAisleLabels] = useState(true);
+  const showAisleLabels = false;
 
   // Google Maps Style Live Navigation State
   const [isWalking, setIsWalking] = useState(false);
@@ -366,28 +414,9 @@ export default function InteractiveFloorMap({
     }
   }, [currentSegment, currentStepIndex, activeStepIndex, onSelectStep, soundEnabled]);
 
-  // Google Maps Style Camera Auto-Follow (Smoothly keeps pointer centered in view)
+  // Static Map Layout: Camera auto-follow is disabled to keep the kiosk map static and stable
   useEffect(() => {
-    if (!isCameraFollowEnabled || !currentUserPos || !route || !isWalking) return;
-
-    const focusWidth = 560;
-    const focusHeight = 420;
-    const targetX = Math.max(0, Math.min(1600 - focusWidth, currentUserPos.x - focusWidth / 2));
-    const targetY = Math.max(0, Math.min(900 - focusHeight, currentUserPos.y - focusHeight / 2));
-
-    setView((curr) => {
-      const dx = (targetX - curr.x) * 0.22;
-      const dy = (targetY - curr.y) * 0.22;
-      if (Math.abs(dx) < 0.3 && Math.abs(dy) < 0.3) return curr;
-      return {
-        ...curr,
-        x: curr.x + dx,
-        y: curr.y + dy,
-        width: focusWidth,
-        height: focusHeight,
-      };
-    });
-    setZoom(1.9);
+    // Map layout remains static to prevent jitter, distortion, or view jumps on touchscreens
   }, [currentUserPos, isCameraFollowEnabled, route]);
 
   function changeZoom(factor: number) {
@@ -478,12 +507,11 @@ export default function InteractiveFloorMap({
     [totalSvgLength]
   );
 
-  // Filter exhibitors: display official company booths and service facilities
-  // Exclude unassigned stalls and custom-drawn landmarks (Ramappa Temple & Committee Office) from generic booth rendering
+  // Filter exhibitors: display officially allotted exhibitor stalls only
   const visibleExhibitors = useMemo(() => {
     return exhibitors.filter((ex) => {
       if (ex.allocationStatus === 'unassigned') return false;
-      if (ex.id === 'counter-ramappa' || ex.id === 'counter-committee') return false;
+      if (ex.isServiceCounter) return false;
       if (activeHall === 'hall-1') return ex.hall === 'Hall-1';
       if (activeHall === 'hanger') return ex.hall === 'Hanger';
       return true;
@@ -548,31 +576,16 @@ export default function InteractiveFloorMap({
       {/* Map Header Toolbar */}
       <div className="map-toolbar">
         <div className="map-title-zone">
-          <div className="map-live-pill">
-            <span className="live-dot" />
-            <span>EXHIBITION INDOOR NAVIGATION MAP</span>
-          </div>
           <strong>
             {activeHall === 'all'
-              ? 'Complete Exhibition Venue (Hall-1 & Hanger)'
+              ? 'Exhibition Floor Map · All Halls'
               : activeHall === 'hall-1'
-                ? 'Hall-1 Floor Layout (Stalls 1–208 · 6.0m Grand Aisles)'
-                : 'Hanger Floor Layout (Stalls 209–387 · Ramappa Temple Pavilion)'}
+                ? 'Hall-1 Floor Map'
+                : 'Hanger Floor Map'}
           </strong>
         </div>
 
         <div className="map-actions-group">
-          {/* Aisle Labels Toggle */}
-          <button
-            type="button"
-            className={`map-toggle-btn ${showAisleLabels ? 'is-active' : ''}`}
-            onClick={() => setShowAisleLabels((prev) => !prev)}
-            title="Toggle walkway dimension tags (6.0m, 4.0m, 3.0m, 2.5m)"
-          >
-            {showAisleLabels ? <Eye size={14} /> : <EyeOff size={14} />}
-            <span>Aisle Widths ({showAisleLabels ? 'ON' : 'OFF'})</span>
-          </button>
-
           <div className="map-zoom-buttons">
             <button
               type="button"
@@ -633,7 +646,7 @@ export default function InteractiveFloorMap({
                 <>
                   <div className="hud-distance-main arrived">YOU HAVE ARRIVED</div>
                   <div className="hud-corridor-name">
-                    {selectedExhibitor?.companyName} ({selectedExhibitor?.stallsFormatted})
+                    {selectedExhibitor?.companyName}
                   </div>
                 </>
               ) : (
@@ -644,12 +657,6 @@ export default function InteractiveFloorMap({
                   <div className="hud-corridor-name">
                     {currentStep?.instruction || 'Follow highlighted walkway'}
                   </div>
-                  {currentStep && (
-                    <div className="hud-sub-info">
-                      <span className="hud-aisle-badge">{currentStep.aisleWidth} AISLE</span>
-                      <span>{currentStep.aisleName}</span>
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -695,7 +702,6 @@ export default function InteractiveFloorMap({
                 <span className="metric-pill time">
                   <strong>{route.walkingMinutes} min</strong> walk
                 </span>
-                <span className="metric-pill stalls">{selectedExhibitor?.stallsFormatted}</span>
                 <span className="metric-pill hall">{selectedExhibitor?.hall}</span>
               </div>
             </div>
@@ -811,75 +817,15 @@ export default function InteractiveFloorMap({
             <rect x="65" y="65" width="680" height="34" rx="8" fill="#1e293b" />
             <text
               x="405"
-              y="87"
+              y="88"
               fill="#f8fafc"
               fontSize="14"
               fontWeight="800"
               textAnchor="middle"
               letterSpacing="2"
             >
-              HANGER · STALLS 209 TO 387
+              HANGER
             </text>
-
-            {/* THEME PAVILION: RAMAPPA TEMPLE (Pink landmark in center, 18m × 6m) */}
-            <g
-              id="theme-pavilion"
-              cursor="pointer"
-              onClick={() => {
-                const ramappa = exhibitors.find((e) => e.id === 'counter-ramappa');
-                if (ramappa) onSelectExhibitor(ramappa);
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label="Theme Pavilion Ramappa Temple"
-            >
-              {selectedExhibitor?.id === 'counter-ramappa' && (
-                <rect x="254" y="404" width="222" height="92" rx="10" fill="#fbcfe8" opacity="0.6" />
-              )}
-              <rect
-                x="260"
-                y="410"
-                width="210"
-                height="80"
-                rx="8"
-                fill={selectedExhibitor?.id === 'counter-ramappa' ? '#fdf2f8' : '#fbcfe8'}
-                stroke={selectedExhibitor?.id === 'counter-ramappa' ? '#be185d' : '#db2777'}
-                strokeWidth={selectedExhibitor?.id === 'counter-ramappa' ? 3.5 : 2.5}
-              />
-              <rect x="266" y="416" width="198" height="68" rx="6" fill="#fdf2f8" opacity="0.8" />
-              <text
-                x="365"
-                y="443"
-                fill="#9d174d"
-                fontSize="13"
-                fontWeight="900"
-                textAnchor="middle"
-                letterSpacing="1"
-              >
-                THEME PAVILION
-              </text>
-              <text
-                x="365"
-                y="462"
-                fill="#be185d"
-                fontSize="11"
-                fontWeight="800"
-                textAnchor="middle"
-              >
-                RAMAPPA TEMPLE (18m × 6m)
-              </text>
-              <text
-                x="365"
-                y="477"
-                fill="#9d174d"
-                fontSize="8.5"
-                fontWeight="700"
-                textAnchor="middle"
-                letterSpacing="0.5"
-              >
-                Flanked by 4.0m Grand Promenades
-              </text>
-            </g>
           </g>
 
           {/* ========================================================
@@ -893,38 +839,28 @@ export default function InteractiveFloorMap({
               height="76"
               fill="url(#passageHatch)"
               stroke="#f97316"
-              strokeWidth="2.5"
+              strokeWidth="2"
             />
-            <rect x="745" y="412" width="105" height="76" fill="#fff7ed" opacity="0.88" />
-            <line x1="745" y1="412" x2="745" y2="488" stroke="#c2410c" strokeWidth="4" />
-            <line x1="850" y1="412" x2="850" y2="488" stroke="#c2410c" strokeWidth="4" />
+            <rect x="745" y="412" width="105" height="76" fill="#fff7ed" opacity="0.9" />
+            <line x1="745" y1="412" x2="745" y2="488" stroke="#c2410c" strokeWidth="3" />
+            <line x1="850" y1="412" x2="850" y2="488" stroke="#c2410c" strokeWidth="3" />
 
             <text
               x="797"
-              y="442"
+              y="445"
               fill="#c2410c"
               fontSize="11"
-              fontWeight="900"
-              textAnchor="middle"
-              letterSpacing="1.5"
-            >
-              COVERED PASSAGE
-            </text>
-            <text
-              x="797"
-              y="460"
-              fill="#ea580c"
-              fontSize="9"
               fontWeight="800"
               textAnchor="middle"
+              letterSpacing="1"
             >
-              ◀ 2.5M WALKWAY ▶
+              PASSAGE
             </text>
             <text
               x="797"
-              y="476"
-              fill="#9a3412"
-              fontSize="8"
+              y="465"
+              fill="#ea580c"
+              fontSize="9"
               fontWeight="700"
               textAnchor="middle"
             >
@@ -949,50 +885,17 @@ export default function InteractiveFloorMap({
             <rect x="850" y="65" width="680" height="34" rx="8" fill="#143a5b" />
             <text
               x="1190"
-              y="87"
+              y="88"
               fill="#f8fafc"
               fontSize="14"
               fontWeight="800"
               textAnchor="middle"
               letterSpacing="2"
             >
-              HALL-1 · STALLS 1 TO 208
+              HALL-1
             </text>
 
-            {/* Committee Office */}
-            <g
-              id="committee-office"
-              cursor="pointer"
-              onClick={() => {
-                const comm = exhibitors.find((e) => e.id === 'counter-committee');
-                if (comm) onSelectExhibitor(comm);
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label="IRC Committee Office"
-            >
-              {selectedExhibitor?.id === 'counter-committee' && (
-                <rect x="854" y="744" width="107" height="72" rx="8" fill="#e2e8f0" opacity="0.6" />
-              )}
-              <rect
-                x="860"
-                y="750"
-                width="95"
-                height="60"
-                rx="6"
-                fill={selectedExhibitor?.id === 'counter-committee' ? '#fef08a' : '#f1f5f9'}
-                stroke={selectedExhibitor?.id === 'counter-committee' ? '#ca8a04' : '#64748b'}
-                strokeWidth={selectedExhibitor?.id === 'counter-committee' ? 3 : 2}
-              />
-              <text x="907" y="776" fill="#1e293b" fontSize="9.5" fontWeight="900" textAnchor="middle">
-                COMMITTEE
-              </text>
-              <text x="907" y="792" fill="#334155" fontSize="8.5" fontWeight="800" textAnchor="middle">
-                OFFICE
-              </text>
-            </g>
-
-            {/* Main Entrance Foyer */}
+            {/* Main Entrance */}
             <g id="main-entrance">
               <rect
                 x="1140"
@@ -1002,18 +905,18 @@ export default function InteractiveFloorMap({
                 rx="6"
                 fill="#15803d"
                 stroke="#166534"
-                strokeWidth="2.5"
+                strokeWidth="2"
               />
               <text
                 x="1200"
                 y="826"
                 fill="#ffffff"
                 fontSize="11"
-                fontWeight="900"
+                fontWeight="800"
                 textAnchor="middle"
-                letterSpacing="1.5"
+                letterSpacing="1"
               >
-                MAIN ENTRANCE
+                ENTRANCE
               </text>
             </g>
           </g>
@@ -1127,40 +1030,38 @@ export default function InteractiveFloorMap({
               const isSelected = selectedExhibitor?.id === ex.id;
               const isHovered = hoveredExhibitor?.id === ex.id;
 
-              let fillColor = '#eff6ff';
-              let strokeColor = '#3b82f6';
-              let textColor = '#1e3a8a';
+              const { lines, fontSize, lineHeight } = getWrappedLines(
+                ex.companyName,
+                ex.width,
+                ex.height
+              );
+              const totalTextHeight = lines.length * lineHeight;
+              const startY = ex.y + (ex.height - totalTextHeight) / 2 + fontSize * 0.85;
+              const centerX = ex.x + ex.width / 2;
 
-              if (ex.isServiceCounter) {
-                fillColor = '#f0fdf4';
-                strokeColor = '#059669';
-                textColor = '#065f46';
-              } else if (ex.isDuplicate) {
-                fillColor = '#fee2e2';
-                strokeColor = '#ef4444';
-                textColor = '#991b1b';
-              } else if (ex.isOutOfRange) {
-                fillColor = '#ffedd5';
-                strokeColor = '#f97316';
-                textColor = '#9a3412';
-              } else if (ex.category.toLowerCase().includes('gold')) {
-                fillColor = '#fef9c3';
+              let fillColor = '#ffffff';
+              let strokeColor = '#2563eb';
+              let textColor = '#0f172a';
+
+              if (ex.category.toLowerCase().includes('gold')) {
+                fillColor = '#fefce8';
                 strokeColor = '#eab308';
-                textColor = '#854d0e';
+                textColor = '#713f12';
               } else if (ex.category.toLowerCase().includes('silver')) {
-                fillColor = '#f1f5f9';
+                fillColor = '#f8fafc';
                 strokeColor = '#94a3b8';
-                textColor = '#334155';
-              } else if (ex.allocationStatus === 'verified') {
-                fillColor = '#ecfdf5';
-                strokeColor = '#10b981';
-                textColor = '#065f46';
+                textColor = '#1e293b';
+              }
+
+              if (isHovered) {
+                fillColor = '#e0f2fe';
+                strokeColor = '#0284c7';
               }
 
               if (isSelected) {
                 fillColor = '#fef08a';
-                strokeColor = '#ca8a04';
-                textColor = '#713f12';
+                strokeColor = '#b45309';
+                textColor = '#78350f';
               }
 
               return (
@@ -1173,17 +1074,17 @@ export default function InteractiveFloorMap({
                   onPointerLeave={() => setHoveredExhibitor(null)}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${ex.companyName} at Stalls ${ex.stallsFormatted}`}
+                  aria-label={ex.companyName}
                 >
                   {(isSelected || isHovered) && (
                     <rect
-                      x={ex.x - 4}
-                      y={ex.y - 4}
-                      width={ex.width + 8}
-                      height={ex.height + 8}
-                      rx="7"
-                      fill={isSelected ? '#eab308' : '#60a5fa'}
-                      opacity={isSelected ? 0.45 : 0.28}
+                      x={ex.x - 3}
+                      y={ex.y - 3}
+                      width={ex.width + 6}
+                      height={ex.height + 6}
+                      rx="6"
+                      fill={isSelected ? '#eab308' : '#38bdf8'}
+                      opacity={isSelected ? 0.45 : 0.3}
                     />
                   )}
 
@@ -1198,39 +1099,24 @@ export default function InteractiveFloorMap({
                     strokeWidth={isSelected ? 3 : isHovered ? 2 : 1.2}
                   />
 
-                  <rect
-                    x={ex.x}
-                    y={ex.y}
-                    width={ex.width}
-                    height={Math.min(18, ex.height * 0.35)}
-                    rx="3"
-                    fill={strokeColor}
-                    opacity="0.88"
-                  />
                   <text
-                    x={ex.x + ex.width / 2}
-                    y={ex.y + Math.min(13, ex.height * 0.26)}
-                    fill="#ffffff"
-                    fontSize={ex.width > 90 ? '9' : '7.5'}
-                    fontWeight="800"
-                    textAnchor="middle"
-                  >
-                    {ex.stalls.length > 5
-                      ? `{${ex.stalls[0]}..${ex.stalls[ex.stalls.length - 1]}}`
-                      : ex.stallsFormatted}
-                  </text>
-
-                  <text
-                    x={ex.x + ex.width / 2}
-                    y={ex.y + Math.min(32, ex.height * 0.65)}
+                    x={centerX}
+                    y={startY}
                     fill={textColor}
-                    fontSize={ex.width > 110 ? '9' : '7.5'}
+                    fontSize={fontSize}
                     fontWeight="700"
                     textAnchor="middle"
+                    pointerEvents="none"
                   >
-                    {ex.companyName.length > 18
-                      ? ex.companyName.substring(0, 16) + '…'
-                      : ex.companyName}
+                    {lines.map((line, idx) => (
+                      <tspan
+                        key={idx}
+                        x={centerX}
+                        dy={idx === 0 ? 0 : lineHeight}
+                      >
+                        {line}
+                      </tspan>
+                    ))}
                   </text>
                 </g>
               );
@@ -1382,44 +1268,12 @@ export default function InteractiveFloorMap({
           </button>
         )}
 
-        {/* Hover Information Tooltip for Exhibitors */}
+        {/* Information Tooltip for Exhibitors */}
         {hoveredExhibitor && !route && (
           <div className="map-floating-tooltip" style={{ left: '20px', bottom: '20px' }}>
             <div className="tooltip-header">
               <strong>{hoveredExhibitor.companyName}</strong>
               <span className="tooltip-badge">{hoveredExhibitor.hall}</span>
-            </div>
-            <div className="tooltip-stalls">
-              <span>Clubbed Stalls: </span>
-              <strong>{hoveredExhibitor.stallsFormatted}</strong>
-            </div>
-            <div className="tooltip-meta">
-              <span>Category: {hoveredExhibitor.category}</span>
-              {hoveredExhibitor.isDuplicate && (
-                <span className="tooltip-warning">⚠ Duplicate Allocation (Stall 288)</span>
-              )}
-              {hoveredExhibitor.isOutOfRange && (
-                <span className="tooltip-warning">⚠ Stall &gt; 341 (Marked in Hanger)</span>
-              )}
-            </div>
-            <div className="tooltip-hint">Click booth to start Google Maps indoor navigation</div>
-          </div>
-        )}
-
-        {/* Hover Information Tooltip for Pathways */}
-        {hoveredPathway && !hoveredExhibitor && !route && (
-          <div className="map-floating-tooltip pathway-tooltip" style={{ left: '20px', bottom: '20px' }}>
-            <div className="tooltip-header">
-              <Footprints size={15} color="#0284c7" />
-              <strong>{hoveredPathway.name}</strong>
-              <span className="tooltip-badge aisle-badge">{hoveredPathway.widthLabel} WIDE</span>
-            </div>
-            <div className="tooltip-stalls">
-              <span>Location: </span>
-              <strong>{hoveredPathway.hall}</strong>
-            </div>
-            <div className="tooltip-meta">
-              <span>{hoveredPathway.description}</span>
             </div>
           </div>
         )}
@@ -1500,44 +1354,6 @@ export default function InteractiveFloorMap({
                 title="Drag to preview position along route"
               />
             </div>
-          </div>
-        )}
-
-        {/* Pan/Zoom Hint (when not navigating) */}
-        {!route && (
-          <div className="map-pan-hint-pill">
-            <Move size={13} />
-            <span>Click & Drag to pan · Scroll wheel to zoom · Click any booth to navigate</span>
-          </div>
-        )}
-      </div>
-
-      {/* Map Legend */}
-      <div className="map-legend-bar">
-        <div className="legend-item">
-          <span className="legend-color-box grand-aisle" />
-          <span>6.0M Main Grand Aisle</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color-box promenade" />
-          <span>4.0M Temple Promenade</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color-box cross-aisle" />
-          <span>3.0M Cross Aisle</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color-box passage" />
-          <span>2.5M Covered Passage</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color-box theme-pavilion" />
-          <span>Ramappa Temple (18m×6m)</span>
-        </div>
-        {route && (
-          <div className="legend-item route-active">
-            <Navigation2 size={13} color="#2563eb" />
-            <span>Google Maps Live Navigation Active</span>
           </div>
         )}
       </div>

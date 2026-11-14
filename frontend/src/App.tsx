@@ -11,7 +11,6 @@ import {
   Building2,
   Compass,
   QrCode,
-  ShieldCheck,
   LogIn,
   Plus,
   X,
@@ -393,28 +392,16 @@ export default function App() {
           </button>
         </div>
 
-        {/* Quick Tools: QR Codes & Organiser Access */}
+        {/* Quick Tools: Mobile QR */}
         <div className="topbar-actions">
           <button
             type="button"
             className="qr-action-btn"
             onClick={() => setShowQrModal(true)}
-            title="Mobile QR Wayfinding Checkpoints"
+            title="Mobile QR Checkpoint"
           >
             <Smartphone size={16} />
             <span>Mobile QR</span>
-          </button>
-
-          <button
-            type="button"
-            className="admin-link"
-            onClick={() => {
-              setAdminOpen((prev) => !prev);
-              setAdminError('');
-            }}
-          >
-            <ShieldCheck size={16} />
-            <span>Organiser</span>
           </button>
         </div>
       </header>
@@ -429,7 +416,7 @@ export default function App() {
           onClick={() => setMobileTab('map')}
         >
           <Compass size={17} />
-          <span>Interactive Map</span>
+          <span>Floor Map</span>
           {activeRoute && <span className="tab-route-pulse" />}
         </button>
 
@@ -439,7 +426,7 @@ export default function App() {
           onClick={() => setMobileTab('directory')}
         >
           <Building2 size={17} />
-          <span>Directory ({clubbedExhibitors.length})</span>
+          <span>Exhibitors ({clubbedExhibitors.length})</span>
         </button>
       </div>
 
