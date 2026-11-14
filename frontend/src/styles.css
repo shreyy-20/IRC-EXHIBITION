@@ -3420,3 +3420,912 @@ footer > span {
 .google-maps-view-btn:hover {
   background: #166534;
 }
+
+
+/* ==========================================================================
+   COMPREHENSIVE RESPONSIVE @MEDIA QUALITY SUITE (ALL SCREEN TYPES & SENSORS)
+   Covers: 4K/Kiosks, Laptops, Tablets, Mobile, Landscape, Retina, Touch,
+           Reduced Motion, High Contrast, Dark Scheme, and Print Quality.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. ULTRA-WIDE SCREENS, 4K DISPLAYS & HITEX EXHIBITION TOUCH KIOSKS
+      (min-width: 1920px and min-width: 2560px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 1920px) {
+  .topbar {
+    height: 96px;
+    padding: 0 8vw;
+  }
+
+  .brand {
+    font-size: 16px;
+  }
+
+  .brand-mark {
+    font-size: 16px;
+    padding: 13px 12px;
+  }
+
+  .hero {
+    max-width: 1680px;
+    padding: 110px 32px 90px;
+    gap: 70px;
+  }
+
+  .hero h1 {
+    font-size: clamp(60px, 5vw, 92px);
+  }
+
+  .map-section {
+    max-width: 1720px;
+    margin: 0 auto;
+  }
+
+  .interactive-map-wrapper {
+    border-radius: 18px;
+  }
+
+  .svg-canvas-container {
+    min-height: 720px;
+    height: 75vh;
+  }
+
+  /* Scaled up for standing readability on exhibition touch kiosks */
+  .google-nav-top-hud {
+    max-width: 820px;
+    top: 20px;
+    padding: 16px 24px;
+    border-radius: 18px;
+  }
+
+  .hud-maneuver-circle {
+    width: 52px;
+    height: 52px;
+  }
+
+  .hud-distance-main {
+    font-size: 24px;
+  }
+
+  .hud-corridor-name {
+    font-size: 16px;
+  }
+
+  .google-nav-bottom-bar {
+    max-width: 820px;
+    bottom: 22px;
+    padding: 16px 24px;
+    border-radius: 18px;
+  }
+
+  .gmaps-time-remaining {
+    font-size: 24px;
+  }
+
+  .gmaps-distance-remaining {
+    font-size: 16px;
+  }
+
+  .google-recenter-fab {
+    bottom: 120px;
+    right: 28px;
+    padding: 12px 22px;
+    font-size: 14px;
+  }
+
+  .directory-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+  }
+
+  .exhibitor-card {
+    padding: 18px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .hero {
+    max-width: 2100px;
+  }
+
+  .map-section {
+    max-width: 2100px;
+  }
+
+  .svg-canvas-container {
+    min-height: 850px;
+    height: 80vh;
+  }
+
+  .directory-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. STANDARD LAPTOPS & WORKSTATIONS (1025px - 1440px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 1025px) and (max-width: 1440px) {
+  .hero {
+    padding: 70px 24px 60px;
+    gap: 36px;
+  }
+
+  .svg-canvas-container {
+    height: 580px;
+  }
+
+  .directory-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   3. TABLETS, IPAD PRO & MEDIUM SCREENS (769px - 1024px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .topbar {
+    height: 74px;
+    padding: 0 24px;
+  }
+
+  .topbar nav {
+    gap: 20px;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 60px 24px 50px;
+    gap: 40px;
+    text-align: left;
+  }
+
+  .hero-art {
+    max-width: 520px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .svg-canvas-container {
+    height: 540px;
+  }
+
+  .directory-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .google-nav-top-hud {
+    max-width: 90%;
+  }
+
+  .google-nav-bottom-bar {
+    max-width: 90%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. SMALL TABLETS, LARGE MOBILES & FOLDABLES (481px - 768px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .topbar {
+    height: auto;
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .topbar nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 4px;
+    gap: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hero {
+    padding: 40px 16px 36px;
+  }
+
+  .hero h1 {
+    font-size: clamp(38px, 9vw, 52px);
+    margin: 16px 0;
+  }
+
+  .hero-buttons-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .primary-button,
+  .secondary-hero-button {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 18px;
+  }
+
+  .hero-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Floor map toolbar */
+  .map-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .map-actions-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .svg-canvas-container {
+    height: 480px;
+  }
+
+  /* Google Maps Top HUD */
+  .google-nav-top-hud {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    max-width: 100%;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .hud-maneuver-circle {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hud-distance-main {
+    font-size: 16px;
+  }
+
+  .hud-corridor-name {
+    font-size: 12px;
+  }
+
+  /* Google Maps Bottom Bar */
+  .google-nav-bottom-bar {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    max-width: 100%;
+    padding: 10px 12px 8px;
+  }
+
+  .gmaps-bottom-metrics-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .google-recenter-fab {
+    bottom: 110px;
+    right: 14px;
+    padding: 8px 14px;
+    font-size: 11px;
+  }
+
+  /* Navigation Guidance Card */
+  .nav-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .nav-close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+  }
+
+  .nav-metrics-strip {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .nav-origin-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .nav-origin-row select {
+    width: 100%;
+  }
+
+  .nav-action-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .nav-action-buttons button,
+  .google-maps-view-btn,
+  .qr-generate-button,
+  .clear-route-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .directory-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .hall-selector-tabs {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hall-tab-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. STANDARD SMARTPHONES (361px - 480px, e.g. iPhone 14/15/16, Galaxy S24)
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  body {
+    font-size: 14px;
+  }
+
+  .brand span {
+    font-size: 11px;
+  }
+
+  .brand-mark {
+    font-size: 12px;
+    padding: 8px 7px;
+  }
+
+  .hero h1 {
+    font-size: 34px;
+    line-height: 1.1;
+  }
+
+  .svg-canvas-container {
+    height: 420px;
+  }
+
+  .map-title-zone strong {
+    font-size: 13px;
+  }
+
+  .google-nav-top-hud {
+    padding: 8px 10px;
+  }
+
+  .hud-instruction-col {
+    max-width: calc(100% - 90px);
+  }
+
+  .hud-distance-main {
+    font-size: 15px;
+  }
+
+  .hud-corridor-name {
+    font-size: 11.5px;
+  }
+
+  .hud-sub-info {
+    display: none; /* Hide secondary sub-info on very small screens to save vertical space */
+  }
+
+  .gmaps-controls-col {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .gmaps-speed-pills {
+    flex: 1;
+    justify-content: space-around;
+  }
+
+  .gmaps-play-btn,
+  .gmaps-exit-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .google-recenter-fab {
+    bottom: 125px;
+    right: 12px;
+  }
+
+  /* Map legend wrap */
+  .map-legend-bar {
+    padding: 10px 12px;
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  .legend-item {
+    font-size: 10px;
+  }
+
+  /* Floating hover tooltip on mobile */
+  .map-floating-tooltip {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 80px !important;
+    max-width: calc(100% - 20px) !important;
+    font-size: 11px;
+  }
+
+  .qr-modal-card {
+    width: 94vw;
+    padding: 16px;
+  }
+
+  .qr-image-frame img {
+    width: 180px;
+    height: 180px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   6. COMPACT SMARTPHONES & SMALL FOLDABLES (<= 360px, e.g. iPhone SE)
+   -------------------------------------------------------------------------- */
+@media (max-width: 360px) {
+  .hero h1 {
+    font-size: 28px;
+  }
+
+  .svg-canvas-container {
+    height: 360px;
+  }
+
+  .hud-distance-main {
+    font-size: 14px;
+  }
+
+  .hud-corridor-name {
+    font-size: 10.5px;
+  }
+
+  .gmaps-time-remaining {
+    font-size: 17px;
+  }
+
+  .gmaps-distance-remaining {
+    font-size: 12px;
+  }
+
+  .map-zoom-buttons button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .zoom-text {
+    font-size: 10px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. MOBILE LANDSCAPE ORIENTATION (orientation: landscape) and (max-height: 550px)
+      Optimizes view when visitor turns phone horizontally while walking
+   -------------------------------------------------------------------------- */
+@media (orientation: landscape) and (max-height: 550px) {
+  .topbar {
+    display: none; /* Auto-collapse topbar in horizontal walk mode for maximum map visibility */
+  }
+
+  .hero {
+    padding: 24px 16px;
+  }
+
+  .svg-canvas-container {
+    height: calc(100vh - 70px);
+    min-height: 290px;
+  }
+
+  /* Ultra-compact top HUD in landscape */
+  .google-nav-top-hud {
+    top: 6px;
+    left: 8px;
+    right: 8px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    gap: 8px;
+  }
+
+  .hud-maneuver-circle {
+    width: 28px;
+    height: 28px;
+  }
+
+  .hud-distance-main {
+    font-size: 14px;
+  }
+
+  .hud-corridor-name {
+    font-size: 11px;
+  }
+
+  .hud-sub-info {
+    display: none;
+  }
+
+  /* Ultra-slim bottom bar in landscape */
+  .google-nav-bottom-bar {
+    bottom: 6px;
+    left: 8px;
+    right: 8px;
+    padding: 6px 12px 4px;
+    border-radius: 8px;
+  }
+
+  .gmaps-bottom-metrics-row {
+    margin-bottom: 2px;
+  }
+
+  .gmaps-time-remaining {
+    font-size: 16px;
+  }
+
+  .gmaps-distance-remaining,
+  .gmaps-eta-clock {
+    font-size: 11px;
+  }
+
+  .google-recenter-fab {
+    bottom: 65px;
+    right: 12px;
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+
+  .map-pan-hint-pill {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   8. RETINA & HIGH-DPI QUALITY (min-resolution: 192dpi / 2dppx)
+   -------------------------------------------------------------------------- */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Super-crisp vector rendering for floor map lines and markers */
+  .interactive-svg-canvas {
+    shape-rendering: geometricPrecision;
+    text-rendering: geometricPrecision;
+  }
+
+  .interactive-svg-canvas line,
+  .interactive-svg-canvas path,
+  .interactive-svg-canvas rect {
+    vector-effect: non-scaling-stroke;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   9. TOUCH & POINTER CAPABILITIES (WCAG 2.2 AA Touch Targets)
+   -------------------------------------------------------------------------- */
+@media (hover: none) and (pointer: coarse) {
+  /* Touch devices: remove 300ms tap delay and ensure comfortable tap zones */
+  button,
+  a,
+  input,
+  select,
+  .interactive-booth-group {
+    touch-action: manipulation;
+  }
+
+  /* Minimum 44px touch targets for accessibility */
+  .map-zoom-buttons button,
+  .hud-audio-btn,
+  .hud-close-btn,
+  .sim-ctrl-btn,
+  .gmaps-speed-btn {
+    min-height: 38px;
+    min-width: 38px;
+  }
+
+  .primary-button,
+  .secondary-hero-button,
+  .google-maps-view-btn,
+  .qr-generate-button,
+  .clear-route-button {
+    min-height: 44px;
+  }
+
+  /* Active press feedback on touch */
+  .interactive-booth-group:active rect {
+    filter: brightness(0.9);
+  }
+
+  button:active {
+    transform: scale(0.97);
+  }
+
+  /* Don't trap tooltips on touch devices */
+  .floor-pathway-segment:hover rect {
+    filter: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* Precision desktop mouse/trackpad: smooth hover reactions */
+  .exhibitor-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .interactive-booth-group:hover {
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10. ACCESSIBILITY: REDUCED MOTION (prefers-reduced-motion: reduce)
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .google-radar-pulse,
+  .route-chevron-arrow,
+  .beacon-ring,
+  .sim-pulse-dot,
+  .live-dot {
+    animation: none !important;
+  }
+
+  .animated-walking-path {
+    animation: none !important;
+    stroke-dasharray: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   11. ACCESSIBILITY: HIGH CONTRAST MODE (prefers-contrast: more)
+   -------------------------------------------------------------------------- */
+@media (prefers-contrast: more) {
+  body {
+    color: #000000;
+    background: #ffffff;
+  }
+
+  .topbar,
+  .interactive-map-wrapper,
+  .exhibitor-card,
+  .navigation-guidance-card,
+  .venue-layout-card {
+    border: 2px solid #000000 !important;
+  }
+
+  .google-nav-top-hud {
+    background: #004d1a !important;
+    border: 2px solid #ffffff !important;
+  }
+
+  .google-nav-bottom-bar {
+    border: 2px solid #000000 !important;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 3px solid #000000 !important;
+    outline-offset: 3px !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   12. ACCESSIBILITY: DARK SCHEME COMPATIBILITY (prefers-color-scheme: dark)
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f1f5f9;
+    background: #0b1120;
+  }
+
+  .topbar {
+    background: #0f172a;
+    border-bottom-color: #1e293b;
+  }
+
+  .brand {
+    color: #f8fafc;
+  }
+
+  .admin-link {
+    color: #94a3b8;
+  }
+
+  .hero h1 {
+    color: #f8fafc;
+  }
+
+  .features h2,
+  .section-heading h2 {
+    color: #f8fafc;
+  }
+
+  .interactive-map-wrapper {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+
+  .map-toolbar {
+    background: #1e293b;
+    border-bottom-color: #334155;
+    color: #f8fafc;
+  }
+
+  .map-toggle-btn {
+    background: #0f172a;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .map-zoom-buttons button {
+    background: #0f172a;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .map-legend-bar {
+    background: #1e293b;
+    border-top-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .google-nav-bottom-bar {
+    background: #0f172a;
+    border-color: #334155;
+    color: #f8fafc;
+  }
+
+  .gmaps-distance-remaining {
+    color: #cbd5e1;
+  }
+
+  .gmaps-exit-btn {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .google-recenter-fab {
+    background: #0f172a;
+    border-color: #334155;
+    color: #60a5fa;
+  }
+
+  .exhibitor-card {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+
+  .exhibitor-company-name h4 {
+    color: #f8fafc;
+  }
+
+  .navigation-guidance-card {
+    background: #0f172a;
+    border-color: #1e293b;
+    color: #f8fafc;
+  }
+
+  .nav-simulation-player {
+    background: #1e293b;
+    border-color: #334155;
+  }
+
+  .current-step-spotlight {
+    background: #0f172a;
+    border-color: #0284c7;
+  }
+
+  .spotlight-instruction {
+    color: #f8fafc;
+  }
+
+  .nav-step-item {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+
+  .nav-step-item.is-active-step {
+    background: #1e293b;
+    border-color: #38bdf8;
+  }
+
+  .step-text {
+    color: #e2e8f0;
+  }
+
+  .stats {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+
+  .stats strong {
+    color: #f8fafc;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   13. PRINT QUALITY STYLESHEET (@media print)
+       High-contrast, zero-waste layout for registration desk printing
+   -------------------------------------------------------------------------- */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+  }
+
+  .topbar nav,
+  .admin-link,
+  .hero-buttons-row,
+  .map-toolbar,
+  .google-nav-top-hud,
+  .google-nav-bottom-bar,
+  .google-recenter-fab,
+  .map-pan-hint-pill,
+  .nav-simulation-player,
+  .nav-action-buttons,
+  .qr-modal-backdrop,
+  footer {
+    display: none !important;
+  }
+
+  .hero {
+    padding: 10px 0;
+  }
+
+  .hero h1 {
+    font-size: 24pt;
+    margin: 8px 0;
+  }
+
+  .interactive-map-wrapper {
+    box-shadow: none !important;
+    border: 1px solid #000000 !important;
+    page-break-inside: avoid;
+  }
+
+  .svg-canvas-container {
+    height: 480px !important;
+  }
+
+  .directory-grid {
+    display: block;
+  }
+
+  .exhibitor-card {
+    page-break-inside: avoid;
+    border: 1px solid #cccccc;
+    margin-bottom: 8px;
+    padding: 8px;
+  }
+
+  a[href]::after {
+    content: none !important;
+  }
+}
