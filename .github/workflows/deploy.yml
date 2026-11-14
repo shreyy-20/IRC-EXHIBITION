@@ -7,13 +7,11 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 concurrency:
   group: 'pages'
   cancel-in-progress: true
@@ -87,35 +85,46 @@ jobs:
           retention-days: 7
 
   # ==========================================
-  # 3. CONTINUOUS DEPLOYMENT (GITHUB PAGES)
+  # 3. DUAL-MODE GITHUB PAGES DEPLOYMENT
   # ==========================================
   deploy-github-pages:
     name: Deploy Interactive App to GitHub Pages
     needs: [backend-test, frontend-build]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Download Built Frontend Artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist
           path: ./dist
 
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
+      # Mode A: Automated gh-pages branch deployment (Zero-config, works with default GitHub settings)
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-        continue-on-error: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
 
+      # Mode B: GitHub Actions artifact deployment (Fallback for repos with Pages set to Actions)
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
+        continue-on-error: true
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy via GitHub Pages Actions
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
