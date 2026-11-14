@@ -35,9 +35,9 @@ import VenueLayouts from './components/VenueLayouts';
 
 const EVENT_ID = 'irc-expo-2026';
 
-const API =
-  import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:8000/api';
+const rawApi = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const cleanApi = rawApi.replace(/\/+$/, '');
+const API = cleanApi.endsWith('/api') ? cleanApi : `${cleanApi}/api`;
 
 const TOKEN_KEY = 'irc_admin_token';
 

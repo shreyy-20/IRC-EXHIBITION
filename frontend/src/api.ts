@@ -11,9 +11,9 @@ import type {
 // API CONFIGURATION
 // --------------------------------------------------
 
-const API =
-  import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:8000/api';
+const rawApi = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const cleanApi = rawApi.replace(/\/+$/, '');
+const API = cleanApi.endsWith('/api') ? cleanApi : `${cleanApi}/api`;
 
 
 // --------------------------------------------------
