@@ -112,25 +112,58 @@ export default function App() {
     }
   }, [selectedExhibitor, positionState.nodeId]);
 
-  // Handle URL deep-link parameter (?destination=... or ?stall=...)
+  // Handle URL deep-link parameters (?checkpoint=..., ?kiosk=..., ?destination=... or ?stall=...)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const dest = params.get('destination') || params.get('stall');
-    if (!dest) return;
+    const cpParam = params.get('checkpoint') || params.get('cp');
+    const kioskParam = params.get('kiosk');
+    const destParam = params.get('destination') || params.get('stall');
 
-    const term = decodeURIComponent(dest).toLowerCase();
-    const match = clubbedExhibitors.find(
-      (ex) =>
-        ex.id.toLowerCase() === term ||
-        ex.companyName.toLowerCase().includes(term) ||
-        ex.clubbedLabel.toLowerCase().includes(term) ||
-        ex.stalls.some((s) => String(s) === term)
-    );
+    if (kioskParam && PHYSICAL_KIOSKS[kioskParam]) {
+      const k = PHYSICAL_KIOSKS[kioskParam];
+      setPositionState({
+        source: 'kiosk',
+        id: k.id,
+        label: k.name,
+        nodeId: k.nodeId,
+        hall: k.hall,
+        coords: { x: k.x, y: k.y },
+        headingDeg: null,
+        timestamp: Date.now(),
+      });
+    } else if (cpParam) {
+      const matchCp = QR_CHECKPOINTS.find(
+        (cp) => cp.id === cpParam || cp.code.toLowerCase() === cpParam.toLowerCase()
+      );
+      if (matchCp) {
+        setPositionState({
+          source: 'qr_checkpoint',
+          id: matchCp.id,
+          label: `${matchCp.code} — ${matchCp.label}`,
+          nodeId: matchCp.nodeId,
+          hall: matchCp.hall,
+          coords: { x: matchCp.x, y: matchCp.y },
+          headingDeg: null,
+          timestamp: Date.now(),
+        });
+      }
+    }
 
-    if (match) {
-      setSelectedExhibitor(match);
-      if (match.hall === 'Hall-1') setActiveHall('hall-1');
-      if (match.hall === 'Hanger') setActiveHall('hanger');
+    if (destParam) {
+      const term = decodeURIComponent(destParam).toLowerCase();
+      const match = clubbedExhibitors.find(
+        (ex) =>
+          ex.id.toLowerCase() === term ||
+          ex.companyName.toLowerCase().includes(term) ||
+          ex.clubbedLabel.toLowerCase().includes(term) ||
+          ex.stalls.some((s) => String(s) === term)
+      );
+
+      if (match) {
+        setSelectedExhibitor(match);
+        if (match.hall === 'Hall-1') setActiveHall('hall-1');
+        if (match.hall === 'Hanger') setActiveHall('hanger');
+      }
     }
   }, []);
 

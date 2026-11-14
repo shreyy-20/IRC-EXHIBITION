@@ -205,28 +205,20 @@ export default function InteractiveFloorMap({
         setWalkProgressSvg(0);
         setIsCameraFollowEnabled(false);
 
-        // Frame route in preview mode
+        // Frame route cleanly according to halls traversed
         if (route.nodes.length > 0) {
-          const xs = route.nodes.map((n) => n.x);
-          const ys = route.nodes.map((n) => n.y);
-          const minX = Math.min(...xs);
-          const maxX = Math.max(...xs);
-          const minY = Math.min(...ys);
-          const maxY = Math.max(...ys);
-
-          const padding = 100;
-          const targetW = Math.max(500, maxX - minX + padding * 2);
-          const targetH = Math.max(400, maxY - minY + padding * 2);
-          const targetX = Math.max(0, Math.min(1600 - targetW, minX - padding));
-          const targetY = Math.max(0, Math.min(900 - targetH, minY - padding));
-
-          setView({
-            x: targetX,
-            y: targetY,
-            width: targetW,
-            height: targetH,
-          });
-          setZoom(1600 / targetW);
+          const hasHall1 = route.nodes.some((n) => n.x >= 750);
+          const hasHanger = route.nodes.some((n) => n.x <= 850);
+          if (hasHall1 && hasHanger) {
+            setView(VIEW_PRESETS['all']);
+            setZoom(1);
+          } else if (hasHall1) {
+            setView(VIEW_PRESETS['hall-1']);
+            setZoom(1);
+          } else {
+            setView(VIEW_PRESETS['hanger']);
+            setZoom(1);
+          }
         }
       }
     } else {
@@ -486,12 +478,17 @@ export default function InteractiveFloorMap({
     [totalSvgLength]
   );
 
-  // Filter exhibitors according to active hall
-  const visibleExhibitors = exhibitors.filter((ex) => {
-    if (activeHall === 'hall-1') return ex.hall === 'Hall-1';
-    if (activeHall === 'hanger') return ex.hall === 'Hanger';
-    return true;
-  });
+  // Filter exhibitors: display official company booths and service facilities
+  // Exclude unassigned stalls and custom-drawn landmarks (Ramappa Temple & Committee Office) from generic booth rendering
+  const visibleExhibitors = useMemo(() => {
+    return exhibitors.filter((ex) => {
+      if (ex.allocationStatus === 'unassigned') return false;
+      if (ex.id === 'counter-ramappa' || ex.id === 'counter-committee') return false;
+      if (activeHall === 'hall-1') return ex.hall === 'Hall-1';
+      if (activeHall === 'hanger') return ex.hall === 'Hanger';
+      return true;
+    });
+  }, [exhibitors, activeHall]);
 
   // Filter pathways according to active hall
   const visiblePathways = FLOOR_PATHWAYS.filter((p) => {
@@ -825,16 +822,29 @@ export default function InteractiveFloorMap({
             </text>
 
             {/* THEME PAVILION: RAMAPPA TEMPLE (Pink landmark in center, 18m × 6m) */}
-            <g id="theme-pavilion">
+            <g
+              id="theme-pavilion"
+              cursor="pointer"
+              onClick={() => {
+                const ramappa = exhibitors.find((e) => e.id === 'counter-ramappa');
+                if (ramappa) onSelectExhibitor(ramappa);
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Theme Pavilion Ramappa Temple"
+            >
+              {selectedExhibitor?.id === 'counter-ramappa' && (
+                <rect x="254" y="404" width="222" height="92" rx="10" fill="#fbcfe8" opacity="0.6" />
+              )}
               <rect
                 x="260"
                 y="410"
                 width="210"
                 height="80"
                 rx="8"
-                fill="#fbcfe8"
-                stroke="#db2777"
-                strokeWidth="2.5"
+                fill={selectedExhibitor?.id === 'counter-ramappa' ? '#fdf2f8' : '#fbcfe8'}
+                stroke={selectedExhibitor?.id === 'counter-ramappa' ? '#be185d' : '#db2777'}
+                strokeWidth={selectedExhibitor?.id === 'counter-ramappa' ? 3.5 : 2.5}
               />
               <rect x="266" y="416" width="198" height="68" rx="6" fill="#fdf2f8" opacity="0.8" />
               <text
@@ -950,21 +960,34 @@ export default function InteractiveFloorMap({
             </text>
 
             {/* Committee Office */}
-            <g id="committee-office">
+            <g
+              id="committee-office"
+              cursor="pointer"
+              onClick={() => {
+                const comm = exhibitors.find((e) => e.id === 'counter-committee');
+                if (comm) onSelectExhibitor(comm);
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="IRC Committee Office"
+            >
+              {selectedExhibitor?.id === 'counter-committee' && (
+                <rect x="854" y="744" width="107" height="72" rx="8" fill="#e2e8f0" opacity="0.6" />
+              )}
               <rect
                 x="860"
                 y="750"
-                width="110"
-                height="75"
+                width="95"
+                height="60"
                 rx="6"
-                fill="#f1f5f9"
-                stroke="#64748b"
-                strokeWidth="2"
+                fill={selectedExhibitor?.id === 'counter-committee' ? '#fef08a' : '#f1f5f9'}
+                stroke={selectedExhibitor?.id === 'counter-committee' ? '#ca8a04' : '#64748b'}
+                strokeWidth={selectedExhibitor?.id === 'counter-committee' ? 3 : 2}
               />
-              <text x="915" y="783" fill="#1e293b" fontSize="10" fontWeight="900" textAnchor="middle">
+              <text x="907" y="776" fill="#1e293b" fontSize="9.5" fontWeight="900" textAnchor="middle">
                 COMMITTEE
               </text>
-              <text x="915" y="800" fill="#334155" fontSize="9" fontWeight="800" textAnchor="middle">
+              <text x="907" y="792" fill="#334155" fontSize="8.5" fontWeight="800" textAnchor="middle">
                 OFFICE
               </text>
             </g>
@@ -1271,31 +1294,32 @@ export default function InteractiveFloorMap({
                 />
               ))}
 
-              {/* Start Point Pin */}
+              {/* Start Point Marker (Google Maps Green Origin) */}
               {route.nodes[0] && (
-                <g transform={`translate(${route.nodes[0].x}, ${route.nodes[0].y})`}>
-                  <circle r="14" fill="#22c55e" opacity="0.35" className="beacon-ring" />
-                  <circle r="7" fill="#16a34a" stroke="#ffffff" strokeWidth="2.5" />
-                  <rect x="-38" y="-30" width="76" height="20" rx="4" fill="#15803d" />
-                  <text x="0" y="-16" fill="#ffffff" fontSize="9" fontWeight="900" textAnchor="middle">
-                    START HERE
-                  </text>
+                <g transform={`translate(${route.nodes[0].x}, ${route.nodes[0].y})`} pointerEvents="none">
+                  <circle r="12" fill="#22c55e" opacity="0.3" className="beacon-ring" />
+                  <circle r="6" fill="#16a34a" stroke="#ffffff" strokeWidth="2" />
+                  <circle r="2" fill="#ffffff" />
                 </g>
               )}
 
-              {/* End Point Pin (Destination) */}
+              {/* Destination Teardrop Pin (Google Maps Red Marker) */}
               {route.nodes[route.nodes.length - 1] && (
                 <g
                   transform={`translate(${route.nodes[route.nodes.length - 1].x}, ${
                     route.nodes[route.nodes.length - 1].y
                   })`}
+                  pointerEvents="none"
                 >
-                  <circle r="16" fill="#ef4444" opacity="0.35" className="beacon-ring" />
-                  <circle r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2.5" />
-                  <rect x="-48" y="-34" width="96" height="22" rx="4" fill="#b91c1c" />
-                  <text x="0" y="-19" fill="#ffffff" fontSize="9.5" fontWeight="900" textAnchor="middle">
-                    DESTINATION
-                  </text>
+                  <circle r="14" fill="#ef4444" opacity="0.25" className="beacon-ring" />
+                  <path
+                    d="M 0 0 C -6 -8, -10 -14, -10 -20 A 10 10 0 1 1 10 -20 C 10 -14, 6 -8, 0 0 Z"
+                    fill="#dc2626"
+                    stroke="#ffffff"
+                    strokeWidth="1.5"
+                    filter="drop-shadow(0 2px 5px rgba(0,0,0,0.35))"
+                  />
+                  <circle cx="0" cy="-20" r="4" fill="#ffffff" />
                 </g>
               )}
 

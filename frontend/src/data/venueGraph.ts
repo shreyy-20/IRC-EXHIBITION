@@ -114,16 +114,16 @@ export const VENUE_NODES: Record<string, NavNode> = {
   hanger_node_west: { id: 'hanger_node_west', label: 'Hanger West Peripheral Stalls', x: 110, y: 450, hall: 'Hanger', type: 'booth_access' },
 
   // Service & Registration Counters
-  counter_reg_1_8: { id: 'counter_reg_1_8', label: 'Registration Counters 1–8', x: 1080, y: 810, hall: 'Hall-1', type: 'landmark' },
-  counter_helpdesk: { id: 'counter_helpdesk', label: 'Help Desk & Information', x: 1260, y: 810, hall: 'Hall-1', type: 'landmark' },
-  counter_vip: { id: 'counter_vip', label: 'VIP Lounge & Protocol Secretariat', x: 920, y: 810, hall: 'Hall-1', type: 'landmark' },
-  counter_firstaid: { id: 'counter_firstaid', label: 'First Aid & Medical Station', x: 1320, y: 810, hall: 'Hall-1', type: 'landmark' },
-  counter_media: { id: 'counter_media', label: 'Media & Press Center', x: 1420, y: 810, hall: 'Hall-1', type: 'landmark' },
-  counter_committee: { id: 'counter_committee', label: 'IRC Committee Office', x: 915, y: 770, hall: 'Hall-1', type: 'landmark' },
+  counter_reg_1_8: { id: 'counter_reg_1_8', label: 'Registration Counters 1–8', x: 1120, y: 765, hall: 'Hall-1', type: 'landmark' },
+  counter_helpdesk: { id: 'counter_helpdesk', label: 'Help Desk & Information', x: 1360, y: 765, hall: 'Hall-1', type: 'landmark' },
+  counter_vip: { id: 'counter_vip', label: 'VIP Lounge & Protocol Secretariat', x: 1010, y: 765, hall: 'Hall-1', type: 'landmark' },
+  counter_firstaid: { id: 'counter_firstaid', label: 'First Aid & Medical Station', x: 1465, y: 765, hall: 'Hall-1', type: 'landmark' },
+  counter_media: { id: 'counter_media', label: 'Media & Press Center', x: 1475, y: 685, hall: 'Hall-1', type: 'landmark' },
+  counter_committee: { id: 'counter_committee', label: 'IRC Committee Office', x: 905, y: 765, hall: 'Hall-1', type: 'landmark' },
   counter_ramappa: { id: 'counter_ramappa', label: 'Theme Pavilion Ramappa Temple', x: 365, y: 450, hall: 'Hanger', type: 'landmark' },
-  counter_food_court: { id: 'counter_food_court', label: 'Food Court & Dining Lawn', x: 80, y: 810, hall: 'Hanger', type: 'landmark' },
-  counter_restrooms_hall1: { id: 'counter_restrooms_hall1', label: 'Restrooms (Hall-1)', x: 1480, y: 770, hall: 'Hall-1', type: 'landmark' },
-  counter_restrooms_hanger: { id: 'counter_restrooms_hanger', label: 'Restrooms (Hanger)', x: 80, y: 110, hall: 'Hanger', type: 'landmark' },
+  counter_food_court: { id: 'counter_food_court', label: 'Food Court & Dining Lawn', x: 135, y: 770, hall: 'Hanger', type: 'landmark' },
+  counter_restrooms_hall1: { id: 'counter_restrooms_hall1', label: 'Restrooms (Hall-1)', x: 1480, y: 140, hall: 'Hall-1', type: 'landmark' },
+  counter_restrooms_hanger: { id: 'counter_restrooms_hanger', label: 'Restrooms (Hanger)', x: 100, y: 110, hall: 'Hanger', type: 'landmark' },
 };
 
 // Graph Edges with specific layout aisle width and name annotations

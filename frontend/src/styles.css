@@ -3918,7 +3918,13 @@ footer > span {
    -------------------------------------------------------------------------- */
 @media (orientation: landscape) and (max-height: 550px) {
   .topbar {
-    display: none; /* Auto-collapse topbar in horizontal walk mode for maximum map visibility */
+    height: 48px;
+    padding: 0 12px;
+  }
+
+  .topbar .brand small,
+  .topbar .location-pin-sub {
+    display: none;
   }
 
   .hero {
@@ -4610,8 +4616,17 @@ footer > span {
 
 .map-viewport-pane .interactive-map-wrapper {
   flex: 1;
-  height: auto;
+  height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-viewport-pane .svg-canvas-container {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 1;
 }
 
 /* ========================================================
@@ -5214,6 +5229,36 @@ footer > span {
 /* ========================================================
    RESPONSIVE BREAKPOINTS FOR SIMPLIFIED LAYOUT
    ======================================================== */
+@media (min-width: 901px) {
+  .topbar-hall-tabs {
+    display: flex !important;
+  }
+
+  .mobile-view-tabs {
+    display: none !important;
+  }
+
+  .directory-sidebar-pane {
+    display: flex !important;
+    width: 400px !important;
+    min-width: 350px !important;
+    max-width: 460px !important;
+  }
+
+  .directory-sidebar-pane.mobile-hidden {
+    display: flex !important;
+  }
+
+  .map-viewport-pane {
+    display: flex !important;
+    flex: 1 !important;
+  }
+
+  .map-viewport-pane.mobile-hidden {
+    display: flex !important;
+  }
+}
+
 @media (max-width: 900px) {
   .topbar-hall-tabs {
     display: none;
