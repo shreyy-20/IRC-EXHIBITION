@@ -9,7 +9,6 @@ import {
 import {
   MapPin,
   Building2,
-  ArrowRight,
   Compass,
   QrCode,
   ShieldCheck,
@@ -17,17 +16,26 @@ import {
   Plus,
   X,
   LogOut,
-  Layers,
+  Share2,
+  Check,
+  ChevronRight,
+  ExternalLink,
+  Smartphone,
 } from 'lucide-react';
 
 import { clubbedExhibitors, type ClubbedExhibitor } from './data/clubbedExhibitors';
 import { findShortestPath, type RoutePath } from './data/venueGraph';
+import {
+  resolveInitialPosition,
+  PHYSICAL_KIOSKS,
+  QR_CHECKPOINTS,
+  buildCheckpointNavUrl,
+  type PositioningState,
+} from './data/indoorPositioning';
 
-import HallSelector, { type HallTab } from './components/HallSelector';
+import { type HallTab } from './components/HallSelector';
 import InteractiveFloorMap from './components/InteractiveFloorMap';
 import ExhibitorDirectory from './components/ExhibitorDirectory';
-import NavigationGuidance from './components/NavigationGuidance';
-import VenueLayouts from './components/VenueLayouts';
 
 // --------------------------------------------------
 // CONFIGURATION
@@ -55,9 +63,18 @@ type AdminStats = {
 export default function App() {
   const [activeHall, setActiveHall] = useState<HallTab>('all');
   const [selectedExhibitor, setSelectedExhibitor] = useState<ClubbedExhibitor | null>(null);
-  const [startNodeId, setStartNodeId] = useState<string>('entrance_main');
+  const [positionState, setPositionState] = useState<PositioningState>(() => resolveInitialPosition());
   const [activeRoute, setActiveRoute] = useState<RoutePath | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
+  const [isNavigatingLive, setIsNavigatingLive] = useState<boolean>(false);
+
+  // Mobile View Toggle ('map' | 'directory')
+  const [mobileTab, setMobileTab] = useState<'map' | 'directory'>('map');
+
+  // Modals
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Admin state
   const [adminOpen, setAdminOpen] = useState(false);
@@ -71,14 +88,14 @@ export default function App() {
   const [newCategory, setNewCategory] = useState('General');
   const [addingExhibitor, setAddingExhibitor] = useState(false);
 
-  // Recalculate route whenever selectedExhibitor or startNodeId changes
+  // Immediate Route Calculation whenever destination or position changes
   useEffect(() => {
     if (selectedExhibitor) {
       const targetNode = selectedExhibitor.accessNodeId || 'hall1_node_b2';
-      const path = findShortestPath(startNodeId, targetNode);
+      const path = findShortestPath(positionState.nodeId, targetNode);
       setActiveRoute(path);
 
-      // Track destination
+      // Track analytics asynchronously
       fetch(`${API}/analytics/track`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,20 +108,23 @@ export default function App() {
       }).catch(() => {});
     } else {
       setActiveRoute(null);
+      setIsNavigatingLive(false);
     }
-  }, [selectedExhibitor, startNodeId]);
+  }, [selectedExhibitor, positionState.nodeId]);
 
-  // Deep-link destination parameter handling
+  // Handle URL deep-link parameter (?destination=... or ?stall=...)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const dest = params.get('destination');
+    const dest = params.get('destination') || params.get('stall');
     if (!dest) return;
 
     const term = decodeURIComponent(dest).toLowerCase();
-    const match = clubbedExhibitors.find((ex) =>
-      ex.companyName.toLowerCase().includes(term) ||
-      ex.clubbedLabel.toLowerCase().includes(term) ||
-      ex.stalls.some((s) => String(s) === term)
+    const match = clubbedExhibitors.find(
+      (ex) =>
+        ex.id.toLowerCase() === term ||
+        ex.companyName.toLowerCase().includes(term) ||
+        ex.clubbedLabel.toLowerCase().includes(term) ||
+        ex.stalls.some((s) => String(s) === term)
     );
 
     if (match) {
@@ -124,24 +144,83 @@ export default function App() {
     []
   );
 
-  // Selection handler
+  // Selection handler (instantly calculates route and shows preview)
   const handleSelectExhibitor = useCallback((exhibitor: ClubbedExhibitor) => {
     setSelectedExhibitor(exhibitor);
     setActiveStepIndex(0);
+    setIsNavigatingLive(false); // Start in route preview mode
 
-    // Automatically focus on corresponding hall if currently viewing 'all'
+    // Automatically adjust hall view if needed
     if (exhibitor.hall === 'Hall-1') {
       setActiveHall('hall-1');
     } else if (exhibitor.hall === 'Hanger') {
       setActiveHall('hanger');
     }
 
-    // Scroll smoothly to map section if visitor is viewing from directory
-    const mapSection = document.getElementById('map-view');
-    if (mapSection) {
-      mapSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    // On mobile screens, automatically show the map
+    setMobileTab('map');
   }, []);
+
+  // Start Live Indoor Navigation
+  const handleStartNavigation = useCallback(() => {
+    if (activeRoute) {
+      setIsNavigatingLive(true);
+      setMobileTab('map');
+    }
+  }, [activeRoute]);
+
+  // Exit / Stop Navigation
+  const handleExitNavigation = useCallback(() => {
+    setIsNavigatingLive(false);
+    setSelectedExhibitor(null);
+    setActiveRoute(null);
+  }, []);
+
+  // Switch start location
+  function handleSelectStartLocation(type: 'kiosk' | 'qr_checkpoint', id: string) {
+    if (type === 'kiosk') {
+      const k = PHYSICAL_KIOSKS[id];
+      if (k) {
+        setPositionState({
+          source: 'kiosk',
+          id: k.id,
+          label: k.name,
+          nodeId: k.nodeId,
+          hall: k.hall,
+          coords: { x: k.x, y: k.y },
+          headingDeg: null,
+          timestamp: Date.now(),
+        });
+      }
+    } else {
+      const cp = QR_CHECKPOINTS.find((c) => c.id === id);
+      if (cp) {
+        setPositionState({
+          source: 'qr_checkpoint',
+          id: cp.id,
+          label: `${cp.code} — ${cp.label}`,
+          nodeId: cp.nodeId,
+          hall: cp.hall,
+          coords: { x: cp.x, y: cp.y },
+          headingDeg: null,
+          timestamp: Date.now(),
+        });
+      }
+    }
+    setShowLocationModal(false);
+    setIsNavigatingLive(false);
+  }
+
+  // Copy mobile navigation link to clipboard
+  function handleCopyMobileLink() {
+    const url = buildCheckpointNavUrl(
+      positionState.id,
+      selectedExhibitor ? selectedExhibitor.id : undefined
+    );
+    navigator.clipboard?.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  }
 
   // Admin login
   async function adminLogin(e: FormEvent<HTMLFormElement>) {
@@ -231,41 +310,307 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app app-fullscreen-shell">
       {/* ========================================================
-          HEADER & TOPBAR
+          SIMPLIFIED TOP APPLICATION BAR
          ======================================================== */}
       <header className="topbar">
-        <a className="brand" href="#">
+        <div className="brand">
           <span className="brand-mark">IRC</span>
           <span>
             EXHIBITION FINDER
-            <small>85th ANNUAL SESSION · HYDERABAD</small>
+            <small>85th ANNUAL SESSION · HITEX HYDERABAD</small>
           </span>
-        </a>
+        </div>
 
-        <nav>
-          <a href="#map-view">Floor Map &amp; Navigation</a>
-          <a href="#directory">Exhibitors ({clubbedExhibitors.length})</a>
-          <a href="#venue-layouts">Venue Drawings</a>
-          <a href="#about">Exhibition Zones</a>
-        </nav>
+        {/* Indoor Positioning Origin Selector */}
+        <div className="topbar-position-pill" onClick={() => setShowLocationModal(true)}>
+          <MapPin size={15} className="location-pin-icon" />
+          <div className="position-text-block">
+            <span className="position-label">MY LOCATION:</span>
+            <strong className="position-name">{positionState.label}</strong>
+          </div>
+          <button type="button" className="position-change-btn" title="Change start location">
+            Change
+          </button>
+        </div>
 
-        <button
-          type="button"
-          className="admin-link"
-          onClick={() => {
-            setAdminOpen((prev) => !prev);
-            setAdminError('');
-          }}
-        >
-          <ShieldCheck size={15} />
-          Organiser Access
-        </button>
+        {/* Hall View Quick Selector */}
+        <div className="topbar-hall-tabs">
+          <button
+            type="button"
+            className={`hall-tab-btn-mini ${activeHall === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveHall('all')}
+          >
+            All Halls
+          </button>
+          <button
+            type="button"
+            className={`hall-tab-btn-mini ${activeHall === 'hall-1' ? 'active' : ''}`}
+            onClick={() => setActiveHall('hall-1')}
+          >
+            Hall-1 ({hall1Count})
+          </button>
+          <button
+            type="button"
+            className={`hall-tab-btn-mini ${activeHall === 'hanger' ? 'active' : ''}`}
+            onClick={() => setActiveHall('hanger')}
+          >
+            Hanger ({hangerCount})
+          </button>
+        </div>
+
+        {/* Quick Tools: QR Codes & Organiser Access */}
+        <div className="topbar-actions">
+          <button
+            type="button"
+            className="qr-action-btn"
+            onClick={() => setShowQrModal(true)}
+            title="Mobile QR Wayfinding Checkpoints"
+          >
+            <Smartphone size={16} />
+            <span>Mobile QR</span>
+          </button>
+
+          <button
+            type="button"
+            className="admin-link"
+            onClick={() => {
+              setAdminOpen((prev) => !prev);
+              setAdminError('');
+            }}
+          >
+            <ShieldCheck size={16} />
+            <span>Organiser</span>
+          </button>
+        </div>
       </header>
 
       {/* ========================================================
-          ADMIN CONSOLE DRAWER
+          MOBILE VIEW TAB TOGGLE (Only visible on small viewports)
+         ======================================================== */}
+      <div className="mobile-view-tabs" role="tablist">
+        <button
+          type="button"
+          className={`mobile-tab-btn ${mobileTab === 'map' ? 'active' : ''}`}
+          onClick={() => setMobileTab('map')}
+        >
+          <Compass size={17} />
+          <span>Interactive Map</span>
+          {activeRoute && <span className="tab-route-pulse" />}
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-tab-btn ${mobileTab === 'directory' ? 'active' : ''}`}
+          onClick={() => setMobileTab('directory')}
+        >
+          <Building2 size={17} />
+          <span>Directory ({clubbedExhibitors.length})</span>
+        </button>
+      </div>
+
+      {/* ========================================================
+          TWO-COMPONENT MAIN WORKSPACE
+          1. Exhibitor / Counter Directory (Left Pane)
+          2. Interactive Floor Map (Right Pane)
+         ======================================================== */}
+      <main className="app-workspace-split">
+        {/* Left Pane: Exhibitor & Service Counter Directory */}
+        <aside
+          className={`directory-sidebar-pane ${mobileTab === 'directory' ? 'mobile-visible' : 'mobile-hidden'}`}
+          aria-label="Exhibitor Directory & Destination Selector"
+        >
+          <ExhibitorDirectory
+            exhibitors={clubbedExhibitors}
+            selectedExhibitor={selectedExhibitor}
+            onSelectExhibitor={handleSelectExhibitor}
+            activeHall={activeHall}
+            onHallChange={setActiveHall}
+            route={activeRoute}
+            isNavigatingLive={isNavigatingLive}
+            onStartNavigation={handleStartNavigation}
+            onExitNavigation={handleExitNavigation}
+            currentLocationLabel={positionState.label}
+            onChangeLocation={() => setShowLocationModal(true)}
+          />
+        </aside>
+
+        {/* Right Pane: Interactive Vector Exhibition Floor Map */}
+        <section
+          className={`map-viewport-pane ${mobileTab === 'map' ? 'mobile-visible' : 'mobile-hidden'}`}
+          aria-label="Interactive Exhibition Floor Map"
+        >
+          <InteractiveFloorMap
+            exhibitors={clubbedExhibitors}
+            selectedExhibitor={selectedExhibitor}
+            onSelectExhibitor={handleSelectExhibitor}
+            activeHall={activeHall}
+            route={activeRoute}
+            activeStepIndex={activeStepIndex}
+            onSelectStep={setActiveStepIndex}
+            onExitNavigation={handleExitNavigation}
+            isNavigatingLive={isNavigatingLive}
+            onStartNavigation={handleStartNavigation}
+          />
+        </section>
+      </main>
+
+      {/* ========================================================
+          INDOOR POSITIONING / START LOCATION MODAL
+         ======================================================== */}
+      {showLocationModal && (
+        <div className="app-modal-overlay" onClick={() => setShowLocationModal(false)}>
+          <div className="app-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">INDOOR POSITIONING</span>
+                <h3>Select Your Current Location</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowLocationModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="modal-description">
+              Choose your physical kiosk or scanned QR checkpoint. The navigation engine will
+              calculate walking routes from this exact location.
+            </p>
+
+            {/* Touchscreen Kiosks */}
+            <div className="location-group-section">
+              <h4>
+                <MapPin size={16} />
+                Physical Touchscreen Kiosks
+              </h4>
+              <div className="location-options-list">
+                {Object.values(PHYSICAL_KIOSKS).map((k) => (
+                  <button
+                    key={k.id}
+                    type="button"
+                    className={`location-option-item ${positionState.id === k.id ? 'is-current' : ''}`}
+                    onClick={() => handleSelectStartLocation('kiosk', k.id)}
+                  >
+                    <div className="loc-info">
+                      <strong>{k.name}</strong>
+                      <span>{k.locationName} · {k.hall}</span>
+                    </div>
+                    {positionState.id === k.id ? (
+                      <span className="current-badge">Selected</span>
+                    ) : (
+                      <ChevronRight size={17} className="chevron" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* QR Checkpoints */}
+            <div className="location-group-section">
+              <h4>
+                <QrCode size={16} />
+                Mobile QR Wayfinding Checkpoints
+              </h4>
+              <div className="location-options-list">
+                {QR_CHECKPOINTS.map((cp) => (
+                  <button
+                    key={cp.id}
+                    type="button"
+                    className={`location-option-item ${positionState.id === cp.id ? 'is-current' : ''}`}
+                    onClick={() => handleSelectStartLocation('qr_checkpoint', cp.id)}
+                  >
+                    <div className="loc-info">
+                      <strong>{cp.code}: {cp.label}</strong>
+                      <span>{cp.locationName} · {cp.hall}</span>
+                    </div>
+                    {positionState.id === cp.id ? (
+                      <span className="current-badge">Selected</span>
+                    ) : (
+                      <ChevronRight size={17} className="chevron" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MOBILE QR CHECKPOINTS MODAL (FOR DELEGATES' PHONES)
+         ======================================================== */}
+      {showQrModal && (
+        <div className="app-modal-overlay" onClick={() => setShowQrModal(false)}>
+          <div className="app-modal-box qr-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">DELEGATE WAYFINDING</span>
+                <h3>Navigate on Your Mobile Device</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowQrModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="modal-description">
+              Scan any QR checkpoint placed on physical venue pillars or entrance totems to open
+              live navigation on your phone from that location.
+            </p>
+
+            <div className="qr-checkpoints-grid">
+              {QR_CHECKPOINTS.map((cp) => {
+                const navUrl = buildCheckpointNavUrl(
+                  cp.id,
+                  selectedExhibitor ? selectedExhibitor.id : undefined
+                );
+                const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                  navUrl
+                )}`;
+
+                return (
+                  <div key={cp.id} className="qr-checkpoint-card">
+                    <img src={qrImgSrc} alt={`QR for ${cp.label}`} className="qr-image" />
+                    <strong className="qr-code-tag">{cp.code}</strong>
+                    <h5 className="qr-label">{cp.label}</h5>
+                    <span className="qr-hall">{cp.hall}</span>
+                    <a
+                      href={navUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="qr-test-link"
+                    >
+                      <ExternalLink size={13} />
+                      Open as {cp.code}
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="qr-modal-footer">
+              <button
+                type="button"
+                className="copy-nav-link-btn"
+                onClick={handleCopyMobileLink}
+              >
+                {copiedLink ? <Check size={16} /> : <Share2 size={16} />}
+                <span>{copiedLink ? 'Link Copied to Clipboard!' : 'Copy Current Navigation Link'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          ADMIN CONSOLE DRAWER (ORGANISER ACCESS)
          ======================================================== */}
       {adminOpen && (
         <section className="admin-panel" aria-label="Organiser Administration Console">
@@ -366,269 +711,6 @@ export default function App() {
           )}
         </section>
       )}
-
-      {/* ========================================================
-          MAIN CONTENT
-         ======================================================== */}
-      <main>
-        {/* HERO SECTION */}
-        <section className="hero">
-          <div className="hero-copy">
-            <div className="eyebrow">
-              <span />
-              85th INDIAN ROADS CONGRESS · HITEX HYDERABAD
-            </div>
-
-            <h1>
-              Find your stalls.
-              <br />
-              <em>Navigate live.</em>
-            </h1>
-
-            <p>
-              Explore all 102 exhibiting companies and their clubbed stall numbers across
-              <strong> Hall-1</strong> and <strong>Hanger</strong>. Click any company name or stall
-              cluster to automatically calculate and display the live walking path on the map.
-            </p>
-
-            <div className="hero-buttons-row">
-              <a className="primary-button" href="#map-view">
-                Explore Live Venue Map
-                <ArrowRight size={17} />
-              </a>
-              <a className="secondary-hero-button" href="#directory">
-                Search Exhibitor List
-              </a>
-            </div>
-
-            <div className="hero-meta">
-              <span>
-                <MapPin size={15} />
-                Revised 12-11-2026 Layout
-              </span>
-              <span>
-                <QrCode size={15} />
-                Mobile QR Wayfinding
-              </span>
-              <span>
-                <Compass size={15} />
-                Graph Dijkstra Live Routing
-              </span>
-            </div>
-          </div>
-
-          <div className="hero-art">
-            <div className="art-card art-card-back">
-              <div className="art-label">EXHIBITION OVERVIEW</div>
-              <div className="art-lines">
-                <i />
-                <i />
-                <i />
-              </div>
-            </div>
-
-            <div className="art-card art-card-front">
-              <div className="art-top">
-                <Compass size={19} />
-                <span>LIVE INDOOR WAYFINDING</span>
-              </div>
-              <div className="mini-map">
-                <i />
-                <i />
-                <i />
-                <b>LIVE ROUTE ACTIVE</b>
-              </div>
-              <div className="art-foot">
-                <span>Hall-1 ⇄ Hanger Connected</span>
-                <ArrowRight size={16} />
-              </div>
-            </div>
-
-            <div className="floating-pin">
-              <MapPin size={19} />
-            </div>
-          </div>
-        </section>
-
-        {/* METRICS STRIP */}
-        <section className="stats">
-          <div>
-            <strong>102</strong>
-            <span>Allotted Exhibitors</span>
-          </div>
-          <div>
-            <strong>341</strong>
-            <span>Reported Stall Total</span>
-          </div>
-          <div>
-            <strong>2</strong>
-            <span>Halls (Hall-1 &amp; Hanger)</span>
-          </div>
-          <div>
-            <strong>1</strong>
-            <span>Ramappa Theme Pavilion</span>
-          </div>
-        </section>
-
-        {/* ========================================================
-            MAP & NAVIGATION ENGINE SECTION
-           ======================================================== */}
-        <section id="map-view" className="section map-section-anchor">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow">INDOOR NAVIGATION &amp; FLOOR MAP</div>
-              <h2>Interactive Venue Layout</h2>
-              <p>
-                Click any company booth on the map or select from the directory below to view
-                the live walking route from the main entrance through the aisles.
-              </p>
-            </div>
-
-            <span className="sample-tag live-tag">
-              <span className="live-dot" />
-              LIVE DIJKSTRA ROUTING
-            </span>
-          </div>
-
-          {/* Hall View Selector */}
-          <HallSelector
-            activeHall={activeHall}
-            onChangeHall={setActiveHall}
-            hall1Count={hall1Count}
-            hangerCount={hangerCount}
-          />
-
-          {/* Active Navigation Guidance Card (Shows when a company is selected) */}
-          {selectedExhibitor && (
-            <NavigationGuidance
-              exhibitor={selectedExhibitor}
-              route={activeRoute}
-              startNodeId={startNodeId}
-              onChangeStartNode={(id) => {
-                setStartNodeId(id);
-                setActiveStepIndex(0);
-              }}
-              onClear={() => {
-                setSelectedExhibitor(null);
-                setActiveStepIndex(0);
-              }}
-              activeStepIndex={activeStepIndex}
-              onSelectStep={setActiveStepIndex}
-            />
-          )}
-
-          {/* Interactive Vector Floor Map */}
-          <InteractiveFloorMap
-            exhibitors={clubbedExhibitors}
-            selectedExhibitor={selectedExhibitor}
-            onSelectExhibitor={handleSelectExhibitor}
-            activeHall={activeHall}
-            route={activeRoute}
-            activeStepIndex={activeStepIndex}
-            onSelectStep={setActiveStepIndex}
-            onExitNavigation={() => {
-              setSelectedExhibitor(null);
-              setActiveStepIndex(0);
-            }}
-          />
-        </section>
-
-        {/* ========================================================
-            EXHIBITOR DIRECTORY WITH CLUBBED STALLS
-           ======================================================== */}
-        <section className="section directory-section-anchor">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow">STALL ALLOTMENT REGISTER</div>
-              <h2>Company Directory &amp; Clubbed Stalls</h2>
-              <p>
-                Find exhibitors by company name, partial string, or stall number. Every company
-                is grouped with all their allotted stalls in one unified clickable card.
-              </p>
-            </div>
-          </div>
-
-          <ExhibitorDirectory
-            exhibitors={clubbedExhibitors}
-            selectedExhibitor={selectedExhibitor}
-            onSelectExhibitor={handleSelectExhibitor}
-            activeHall={activeHall}
-            onHallChange={setActiveHall}
-          />
-        </section>
-
-        {/* ========================================================
-            OFFICIAL VENUE CAD DRAWINGS REFERENCE
-           ======================================================== */}
-        <VenueLayouts />
-
-        {/* ========================================================
-            ABOUT / FEATURES
-           ======================================================== */}
-        <section className="features" id="about">
-          <div className="eyebrow">BUILT FOR IRC 85th ANNUAL SESSION</div>
-          <h2>
-            Smart exhibition discovery.
-            <br />
-            <em>Seamless indoor navigation.</em>
-          </h2>
-
-          <div className="feature-grid">
-            <article>
-              <Building2 />
-              <h3>Clubbed Stall Blocks</h3>
-              <p>
-                Multi-stall exhibitors such as Zydex, Automark, ARRB, and Kataline are grouped as
-                unified blocks so visitors can identify large pavilions immediately.
-              </p>
-            </article>
-
-            <article>
-              <Compass />
-              <h3>Shortest-Path Navigation</h3>
-              <p>
-                Dijkstra graph-based routing traverses actual aisles, connecting Hall-1 and Hanger
-                via the approved inter-hall passage without cutting through booths.
-              </p>
-            </article>
-
-            <article>
-              <Layers />
-              <h3>Hall-1 &amp; Hanger Split</h3>
-              <p>
-                Explore each hall independently or inspect the complete combined exhibition
-                floor with the Ramappa Temple Theme Pavilion clearly marked.
-              </p>
-            </article>
-
-            <article>
-              <QrCode />
-              <h3>Mobile Checkpoint Wayfinding</h3>
-              <p>
-                Scan destination QR codes from exhibition kiosks to carry turn-by-turn directions
-                directly on your smartphone.
-              </p>
-            </article>
-          </div>
-        </section>
-      </main>
-
-      {/* ========================================================
-          FOOTER
-         ======================================================== */}
-      <footer>
-        <div className="brand">
-          <span className="brand-mark">IRC</span>
-          <span>
-            EXHIBITION FINDER
-            <small>INDIAN ROADS CONGRESS 2026 · HITEX HYDERABAD</small>
-          </span>
-        </div>
-
-        <span>
-          Based on Revised Exhibition Layout 12-11-2026 &amp; Stall Allotment Register
-        </span>
-      </footer>
     </div>
   );
 }

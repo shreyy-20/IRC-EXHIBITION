@@ -112,6 +112,18 @@ export const VENUE_NODES: Record<string, NavNode> = {
   hanger_node_east: { id: 'hanger_node_east', label: 'Hanger East Peripheral Stalls', x: 680, y: 450, hall: 'Hanger', type: 'booth_access' },
   hanger_node_south: { id: 'hanger_node_south', label: 'Hanger South Peripheral Stalls', x: 350, y: 750, hall: 'Hanger', type: 'booth_access' },
   hanger_node_west: { id: 'hanger_node_west', label: 'Hanger West Peripheral Stalls', x: 110, y: 450, hall: 'Hanger', type: 'booth_access' },
+
+  // Service & Registration Counters
+  counter_reg_1_8: { id: 'counter_reg_1_8', label: 'Registration Counters 1–8', x: 1080, y: 810, hall: 'Hall-1', type: 'landmark' },
+  counter_helpdesk: { id: 'counter_helpdesk', label: 'Help Desk & Information', x: 1260, y: 810, hall: 'Hall-1', type: 'landmark' },
+  counter_vip: { id: 'counter_vip', label: 'VIP Lounge & Protocol Secretariat', x: 920, y: 810, hall: 'Hall-1', type: 'landmark' },
+  counter_firstaid: { id: 'counter_firstaid', label: 'First Aid & Medical Station', x: 1320, y: 810, hall: 'Hall-1', type: 'landmark' },
+  counter_media: { id: 'counter_media', label: 'Media & Press Center', x: 1420, y: 810, hall: 'Hall-1', type: 'landmark' },
+  counter_committee: { id: 'counter_committee', label: 'IRC Committee Office', x: 915, y: 770, hall: 'Hall-1', type: 'landmark' },
+  counter_ramappa: { id: 'counter_ramappa', label: 'Theme Pavilion Ramappa Temple', x: 365, y: 450, hall: 'Hanger', type: 'landmark' },
+  counter_food_court: { id: 'counter_food_court', label: 'Food Court & Dining Lawn', x: 80, y: 810, hall: 'Hanger', type: 'landmark' },
+  counter_restrooms_hall1: { id: 'counter_restrooms_hall1', label: 'Restrooms (Hall-1)', x: 1480, y: 770, hall: 'Hall-1', type: 'landmark' },
+  counter_restrooms_hanger: { id: 'counter_restrooms_hanger', label: 'Restrooms (Hanger)', x: 80, y: 110, hall: 'Hanger', type: 'landmark' },
 };
 
 // Graph Edges with specific layout aisle width and name annotations
@@ -254,6 +266,18 @@ export const VENUE_EDGES: NavEdge[] = [
   { from: 'hanger_east_mid', to: 'hanger_node_east', distanceM: 3, hall: 'Hanger', aisleName: 'Hanger East Avenue Access', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
   { from: 'hanger_mid_bot', to: 'hanger_node_south', distanceM: 3, hall: 'Hanger', aisleName: 'Hanger South Promenade Access', aisleWidth: '3.0M', pathwayId: 'hanger_south_promenade' },
   { from: 'hanger_outer_mid', to: 'hanger_node_west', distanceM: 3, hall: 'Hanger', aisleName: 'Outer West Walkway Access', aisleWidth: '2.5M', pathwayId: 'hanger_outer_west_perimeter' },
+
+  // Service Counter Access Edges
+  { from: 'counter_reg_1_8', to: 'entrance_hall1', distanceM: 4, hall: 'Hall-1', aisleName: 'Main Foyer Registration Area', aisleWidth: '6.0M', pathwayId: 'hall1_foyer_entrance' },
+  { from: 'counter_helpdesk', to: 'entrance_hall1', distanceM: 4, hall: 'Hall-1', aisleName: 'Main Foyer Information Desk', aisleWidth: '6.0M', pathwayId: 'hall1_foyer_entrance' },
+  { from: 'counter_vip', to: 'hall1_south_w', distanceM: 5, hall: 'Hall-1', aisleName: 'South Promenade VIP Corridor', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
+  { from: 'counter_firstaid', to: 'hall1_south_mid', distanceM: 5, hall: 'Hall-1', aisleName: 'South Promenade Medical Access', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
+  { from: 'counter_media', to: 'hall1_south_e', distanceM: 5, hall: 'Hall-1', aisleName: 'South Promenade Media Corridor', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
+  { from: 'counter_committee', to: 'hall1_south_w', distanceM: 4, hall: 'Hall-1', aisleName: 'Committee Office Entrance', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
+  { from: 'counter_ramappa', to: 'hanger_mid_ramappa_n', distanceM: 3, hall: 'Hanger', aisleName: 'Ramappa Temple North Access', aisleWidth: '4.0M', pathwayId: 'hanger_ramappa_north' },
+  { from: 'counter_food_court', to: 'hanger_outer_bot', distanceM: 5, hall: 'Hanger', aisleName: 'Outdoor Dining Lawn Pathway', aisleWidth: '3.0M', pathwayId: 'hanger_south_promenade' },
+  { from: 'counter_restrooms_hall1', to: 'hall1_south_e', distanceM: 4, hall: 'Hall-1', aisleName: 'Hall-1 Restrooms Access', aisleWidth: '2.5M', pathwayId: 'hall1_east_perimeter' },
+  { from: 'counter_restrooms_hanger', to: 'hanger_outer_top', distanceM: 4, hall: 'Hanger', aisleName: 'Hanger Restrooms Access', aisleWidth: '2.5M', pathwayId: 'hanger_outer_west_perimeter' },
 ];
 
 export type RouteStep = {

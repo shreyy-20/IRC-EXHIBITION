@@ -37,6 +37,8 @@ type Props = {
   activeStepIndex?: number | null;
   onSelectStep?: (index: number) => void;
   onExitNavigation?: () => void;
+  isNavigatingLive?: boolean;
+  onStartNavigation?: () => void;
 };
 
 type ViewBox = {
@@ -122,6 +124,8 @@ export default function InteractiveFloorMap({
   activeStepIndex = null,
   onSelectStep,
   onExitNavigation,
+  isNavigatingLive = false,
+  onStartNavigation,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -188,21 +192,50 @@ export default function InteractiveFloorMap({
   // Reset navigation when route or selected exhibitor changes
   useEffect(() => {
     if (route) {
-      setWalkProgressSvg(0);
       setHasArrived(false);
-      setIsCameraFollowEnabled(true);
       lastChimedStepRef.current = -1;
       if (segments[0]) {
         setUserBearing(segments[0].angleDeg);
       }
-      // Start moving smoothly along route automatically like Google Maps
-      setIsWalking(true);
+      if (isNavigatingLive) {
+        setIsWalking(true);
+        setIsCameraFollowEnabled(true);
+      } else {
+        setIsWalking(false);
+        setWalkProgressSvg(0);
+        setIsCameraFollowEnabled(false);
+
+        // Frame route in preview mode
+        if (route.nodes.length > 0) {
+          const xs = route.nodes.map((n) => n.x);
+          const ys = route.nodes.map((n) => n.y);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+
+          const padding = 100;
+          const targetW = Math.max(500, maxX - minX + padding * 2);
+          const targetH = Math.max(400, maxY - minY + padding * 2);
+          const targetX = Math.max(0, Math.min(1600 - targetW, minX - padding));
+          const targetY = Math.max(0, Math.min(900 - targetH, minY - padding));
+
+          setView({
+            x: targetX,
+            y: targetY,
+            width: targetW,
+            height: targetH,
+          });
+          setZoom(1600 / targetW);
+        }
+      }
     } else {
       setIsWalking(false);
       setWalkProgressSvg(0);
       setHasArrived(false);
+      setIsCameraFollowEnabled(false);
     }
-  }, [route, segments]);
+  }, [route, segments, isNavigatingLive]);
 
   // Jump pointer when parent selects a specific step index
   useEffect(() => {
@@ -343,7 +376,7 @@ export default function InteractiveFloorMap({
 
   // Google Maps Style Camera Auto-Follow (Smoothly keeps pointer centered in view)
   useEffect(() => {
-    if (!isCameraFollowEnabled || !currentUserPos || !route) return;
+    if (!isCameraFollowEnabled || !currentUserPos || !route || !isWalking) return;
 
     const focusWidth = 560;
     const focusHeight = 420;
@@ -584,9 +617,9 @@ export default function InteractiveFloorMap({
       {/* SVG Canvas Container with Google Maps Overlays */}
       <div className="svg-canvas-container">
         {/* ========================================================
-            GOOGLE MAPS FLOATING TOP NAVIGATION HUD
+            GOOGLE MAPS FLOATING TOP NAVIGATION HUD (LIVE NAVIGATION)
            ======================================================== */}
-        {route && (
+        {route && isNavigatingLive && (
           <div className="google-nav-top-hud">
             <div className="hud-maneuver-col">
               <div className="hud-maneuver-circle">
@@ -638,6 +671,52 @@ export default function InteractiveFloorMap({
                 className="hud-close-btn"
                 onClick={() => onExitNavigation?.()}
                 title="Exit navigation mode"
+              >
+                <X size={17} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            ROUTE PREVIEW FLOATING CARD (DESTINATION SELECTED PREVIEW)
+           ======================================================== */}
+        {route && !isNavigatingLive && (
+          <div className="google-nav-preview-card">
+            <div className="preview-card-info">
+              <div className="preview-destination-badge">
+                <Navigation2 size={14} />
+                <span>ROUTE PREVIEW</span>
+              </div>
+              <h3 className="preview-destination-name">
+                {selectedExhibitor?.companyName || 'Selected Destination'}
+              </h3>
+              <div className="preview-metrics-row">
+                <span className="metric-pill dist">
+                  <strong>{route.distanceMeters} m</strong>
+                </span>
+                <span className="metric-pill time">
+                  <strong>{route.walkingMinutes} min</strong> walk
+                </span>
+                <span className="metric-pill stalls">{selectedExhibitor?.stallsFormatted}</span>
+                <span className="metric-pill hall">{selectedExhibitor?.hall}</span>
+              </div>
+            </div>
+            <div className="preview-actions">
+              <button
+                type="button"
+                className="preview-start-nav-btn"
+                onClick={() => onStartNavigation?.()}
+                title="Start live turn-by-turn indoor navigation"
+              >
+                <Play size={16} fill="currentColor" />
+                <span>START NAVIGATION</span>
+              </button>
+              <button
+                type="button"
+                className="preview-cancel-btn"
+                onClick={() => onExitNavigation?.()}
+                title="Clear route"
               >
                 <X size={17} />
               </button>
@@ -1029,7 +1108,11 @@ export default function InteractiveFloorMap({
               let strokeColor = '#3b82f6';
               let textColor = '#1e3a8a';
 
-              if (ex.isDuplicate) {
+              if (ex.isServiceCounter) {
+                fillColor = '#f0fdf4';
+                strokeColor = '#059669';
+                textColor = '#065f46';
+              } else if (ex.isDuplicate) {
                 fillColor = '#fee2e2';
                 strokeColor = '#ef4444';
                 textColor = '#991b1b';
@@ -1263,7 +1346,7 @@ export default function InteractiveFloorMap({
             RE-CENTER FLOATING ACTION BUTTON (GOOGLE MAPS STYLE)
             Appears when the user pans/zooms away from the moving user puck
            ======================================================== */}
-        {route && !isCameraFollowEnabled && (
+        {route && isNavigatingLive && !isCameraFollowEnabled && (
           <button
             type="button"
             className="google-recenter-fab"
@@ -1320,7 +1403,7 @@ export default function InteractiveFloorMap({
         {/* ========================================================
             GOOGLE MAPS BOTTOM NAVIGATION CONTROLLER BAR
            ======================================================== */}
-        {route && (
+        {route && isNavigatingLive && (
           <div className="google-nav-bottom-bar">
             {/* Top row: Metrics and ETA */}
             <div className="gmaps-bottom-metrics-row">

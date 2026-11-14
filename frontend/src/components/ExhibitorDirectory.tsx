@@ -4,11 +4,16 @@ import {
   X,
   Building2,
   Navigation,
+  Navigation2,
   AlertTriangle,
   Filter,
   Sparkles,
+  MapPin,
+  Square,
+  Compass,
 } from 'lucide-react';
 import type { ClubbedExhibitor } from '../data/clubbedExhibitors';
+import type { RoutePath } from '../data/venueGraph';
 import type { HallTab } from './HallSelector';
 
 type Props = {
@@ -17,6 +22,12 @@ type Props = {
   onSelectExhibitor: (exhibitor: ClubbedExhibitor) => void;
   activeHall: HallTab;
   onHallChange: (hall: HallTab) => void;
+  route?: RoutePath | null;
+  isNavigatingLive?: boolean;
+  onStartNavigation?: () => void;
+  onExitNavigation?: () => void;
+  currentLocationLabel?: string;
+  onChangeLocation?: () => void;
 };
 
 export default function ExhibitorDirectory({
@@ -25,9 +36,15 @@ export default function ExhibitorDirectory({
   onSelectExhibitor,
   activeHall,
   onHallChange,
+  route,
+  isNavigatingLive = false,
+  onStartNavigation,
+  onExitNavigation,
+  currentLocationLabel = 'Main Entrance Kiosk',
+  onChangeLocation,
 }: Props) {
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'duplicate' | 'out_of_range'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'companies' | 'counters' | 'verified' | 'duplicate'>('all');
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -37,14 +54,15 @@ export default function ExhibitorDirectory({
       if (activeHall === 'hall-1' && ex.hall !== 'Hall-1') return false;
       if (activeHall === 'hanger' && ex.hall !== 'Hanger') return false;
 
-      // Status filter
-      if (statusFilter === 'verified' && ex.allocationStatus !== 'verified') return false;
-      if (statusFilter === 'duplicate' && !ex.isDuplicate) return false;
-      if (statusFilter === 'out_of_range' && !ex.isOutOfRange) return false;
+      // Type / Status filter
+      if (filterType === 'companies' && (ex.isServiceCounter || ex.allocationStatus === 'unassigned')) return false;
+      if (filterType === 'counters' && !ex.isServiceCounter) return false;
+      if (filterType === 'verified' && ex.allocationStatus !== 'verified') return false;
+      if (filterType === 'duplicate' && !ex.isDuplicate) return false;
 
       if (!q) return true;
 
-      // Check match on company name
+      // Check match on company/counter name
       const nameMatch = ex.companyName.toLowerCase().includes(q);
       // Check match on stall numbers
       const stallMatch = ex.stalls.some((s) => String(s) === q || String(s).includes(q));
@@ -55,7 +73,7 @@ export default function ExhibitorDirectory({
 
       return nameMatch || stallMatch || rawMatch || catMatch;
     });
-  }, [exhibitors, query, activeHall, statusFilter]);
+  }, [exhibitors, query, activeHall, filterType]);
 
   // Check if searched query matched duplicate stall 288
   const hasDuplicateMatch = query.includes('288') || filtered.some((ex) => ex.isDuplicate);
@@ -65,20 +83,19 @@ export default function ExhibitorDirectory({
       {/* Search Header */}
       <div className="directory-header">
         <div className="directory-title-block">
-          <h3>Exhibitor Directory &amp; Stall Clusters</h3>
+          <h3>Exhibitor Directory &amp; Counters</h3>
           <p>
-            Browse companies with clubbed stall numbers. Click any company to automatically
-            display the live walking route on the venue map.
+            Search by company, stall number, or service counter. Instant route is drawn on the map.
           </p>
         </div>
 
         <div className="directory-stats-chip">
           <Sparkles size={14} />
-          <span>{filtered.length} Companies Listed</span>
+          <span>{filtered.length} Listed</span>
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Real-Time Search Bar */}
       <div className="directory-search-bar">
         <div className="search-input-wrap">
           <Search size={18} className="search-icon" />
@@ -86,8 +103,8 @@ export default function ExhibitorDirectory({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search company name (e.g. Zydex, Orafol) or stall number (e.g. 21, 288, 385)..."
-            aria-label="Search exhibitors by company or stall number"
+            placeholder="Search company (Zydex, Orafol), stall # (21, 288), or counter (Registration, Help Desk)..."
+            aria-label="Search exhibitors by company, stall number, or service counter"
           />
           {query && (
             <button
@@ -106,76 +123,142 @@ export default function ExhibitorDirectory({
       <div className="directory-filters-row">
         <div className="filter-group">
           <Filter size={14} className="filter-label-icon" />
-          <span className="filter-label">Hall:</span>
+          <span className="filter-label">Filter:</span>
           <button
             type="button"
-            className={`filter-chip ${activeHall === 'all' ? 'active' : ''}`}
-            onClick={() => onHallChange('all')}
+            className={`filter-chip ${filterType === 'all' ? 'active' : ''}`}
+            onClick={() => setFilterType('all')}
           >
-            All Halls
+            All
           </button>
           <button
             type="button"
-            className={`filter-chip ${activeHall === 'hall-1' ? 'active' : ''}`}
-            onClick={() => onHallChange('hall-1')}
+            className={`filter-chip ${filterType === 'companies' ? 'active' : ''}`}
+            onClick={() => setFilterType('companies')}
           >
-            Hall-1
+            Companies
           </button>
           <button
             type="button"
-            className={`filter-chip ${activeHall === 'hanger' ? 'active' : ''}`}
-            onClick={() => onHallChange('hanger')}
+            className={`filter-chip ${filterType === 'counters' ? 'active' : ''}`}
+            onClick={() => setFilterType('counters')}
           >
-            Hanger
-          </button>
-        </div>
-
-        <div className="filter-group status-group">
-          <span className="filter-label">Status:</span>
-          <button
-            type="button"
-            className={`filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('all')}
-          >
-            All Records
+            Services &amp; Counters
           </button>
           <button
             type="button"
-            className={`filter-chip ${statusFilter === 'verified' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('verified')}
+            className={`filter-chip warning-chip ${filterType === 'duplicate' ? 'active' : ''}`}
+            onClick={() => setFilterType('duplicate')}
           >
-            Major Clusters
-          </button>
-          <button
-            type="button"
-            className={`filter-chip warning-chip ${statusFilter === 'duplicate' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('duplicate')}
-          >
-            Duplicate (288)
-          </button>
-          <button
-            type="button"
-            className={`filter-chip warning-chip ${statusFilter === 'out_of_range' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('out_of_range')}
-          >
-            Out of Range (&gt;341)
+            Duplicate 288
           </button>
         </div>
       </div>
 
-      {/* Duplicate Warning Callout if stall 288 or duplicate is queried */}
+      {/* Duplicate Warning Callout if stall 288 is queried */}
       {hasDuplicateMatch && (
         <div className="discrepancy-banner warning">
           <AlertTriangle size={18} />
           <div>
             <strong>DISCREPANCY ALERT · STALL 288 DUPLICATE ALLOCATION:</strong>
             <p>
-              Stall 288 is assigned to both <em>AMMANN INDIA PRIVATE LIMITED</em> (Row 97)
-              and <em>CTM TECHNICAL TEXTILES LIMITED</em> (Row 103) in the source allotment register.
-              Both options are displayed below for organiser verification.
+              Stall 288 is assigned to both <em>AMMANN INDIA PRIVATE LIMITED</em> and{' '}
+              <em>CTM TECHNICAL TEXTILES LIMITED</em>. Both options are listed below for navigation.
             </p>
           </div>
         </div>
+      )}
+
+      {/* ========================================================
+          SELECTED DESTINATION SPOTLIGHT & ROUTE PREVIEW CARD
+         ======================================================== */}
+      {selectedExhibitor && (
+        <section className="destination-spotlight-card" aria-label="Selected Destination Navigation Card">
+          <div className="spotlight-top-bar">
+            <span className="spotlight-kicker">
+              <Compass size={14} />
+              {isNavigatingLive ? 'LIVE NAVIGATION IN PROGRESS' : 'DESTINATION SELECTED'}
+            </span>
+            <button
+              type="button"
+              className="spotlight-close-btn"
+              onClick={() => onExitNavigation?.()}
+              title="Clear selection"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="spotlight-main">
+            <h4 className="spotlight-title">{selectedExhibitor.companyName}</h4>
+            <div className="spotlight-meta-tags">
+              <span className="spotlight-badge stall-badge">
+                {selectedExhibitor.stallsFormatted}
+              </span>
+              <span className="spotlight-badge hall-badge">{selectedExhibitor.hall}</span>
+              <span className="spotlight-badge cat-badge">{selectedExhibitor.category}</span>
+            </div>
+
+            {/* Origin & Routing Metrics */}
+            <div className="spotlight-route-info">
+              <div className="origin-row">
+                <MapPin size={15} className="origin-pin-icon" />
+                <span>
+                  From: <strong>{currentLocationLabel}</strong>
+                </span>
+                {onChangeLocation && (
+                  <button
+                    type="button"
+                    className="change-origin-link"
+                    onClick={onChangeLocation}
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+
+              {route && (
+                <div className="route-metrics-strip">
+                  <div className="metric-item">
+                    <span className="metric-val">{route.distanceMeters} m</span>
+                    <span className="metric-lbl">Walking Distance</span>
+                  </div>
+                  <div className="metric-item">
+                    <span className="metric-val">{route.walkingMinutes} min</span>
+                    <span className="metric-lbl">Est. Walking Time</span>
+                  </div>
+                  <div className="metric-item">
+                    <span className="metric-val">{route.steps.length} turns</span>
+                    <span className="metric-lbl">Passage Route</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Prominent Action Button: START NAVIGATION */}
+            <div className="spotlight-actions">
+              {!isNavigatingLive ? (
+                <button
+                  type="button"
+                  className="spotlight-start-nav-btn primary-nav-action"
+                  onClick={() => onStartNavigation?.()}
+                >
+                  <Navigation2 size={19} className="nav-arrow-icon" />
+                  <span>START NAVIGATION</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="spotlight-stop-nav-btn"
+                  onClick={() => onExitNavigation?.()}
+                >
+                  <Square size={16} fill="currentColor" />
+                  <span>EXIT NAVIGATION</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Exhibitor Cards List */}
@@ -188,12 +271,14 @@ export default function ExhibitorDirectory({
               key={ex.id}
               className={`exhibitor-card ${isSelected ? 'is-selected' : ''} ${
                 ex.isDuplicate ? 'has-duplicate' : ''
-              } ${ex.isOutOfRange ? 'has-out-of-range' : ''}`}
+              } ${ex.isOutOfRange ? 'has-out-of-range' : ''} ${
+                ex.isServiceCounter ? 'is-service-card' : ''
+              }`}
               onClick={() => onSelectExhibitor(ex)}
             >
               <div className="exhibitor-card-top">
                 <div className="exhibitor-clubbed-badge">
-                  <span>Stalls:</span>
+                  <span>{ex.isServiceCounter ? 'Facility:' : 'Stalls:'}</span>
                   <strong>{ex.stallsFormatted}</strong>
                 </div>
 
@@ -211,13 +296,15 @@ export default function ExhibitorDirectory({
                 <span className="exhibitor-category">{ex.category}</span>
                 <span
                   className={`status-pill ${
-                    ex.isDuplicate
-                      ? 'pill-duplicate'
-                      : ex.isOutOfRange
-                        ? 'pill-oor'
-                        : ex.allocationStatus === 'verified'
-                          ? 'pill-verified'
-                          : 'pill-provisional'
+                    ex.isServiceCounter
+                      ? 'pill-service'
+                      : ex.isDuplicate
+                        ? 'pill-duplicate'
+                        : ex.isOutOfRange
+                          ? 'pill-oor'
+                          : ex.allocationStatus === 'verified'
+                            ? 'pill-verified'
+                            : 'pill-provisional'
                   }`}
                 >
                   {ex.verificationStatus}
@@ -234,9 +321,11 @@ export default function ExhibitorDirectory({
                   }}
                 >
                   <Navigation size={14} />
-                  <span>{isSelected ? 'Live Path Active' : 'Navigate to Stalls'}</span>
+                  <span>{isSelected ? 'Route Active' : 'Select & View Route'}</span>
                 </button>
-                <small className="raw-source-note">Source Row {ex.sourceRow}</small>
+                <small className="raw-source-note">
+                  {ex.isServiceCounter ? 'Official Service' : `Source Row ${ex.sourceRow}`}
+                </small>
               </div>
             </article>
           );
@@ -245,13 +334,13 @@ export default function ExhibitorDirectory({
         {filtered.length === 0 && (
           <div className="empty-results-box">
             <Building2 size={36} />
-            <p>No exhibitors matched your search query "{query}".</p>
+            <p>No exhibitors or counters matched your search query "{query}".</p>
             <button
               type="button"
               className="clear-filters-link"
               onClick={() => {
                 setQuery('');
-                setStatusFilter('all');
+                setFilterType('all');
                 onHallChange('all');
               }}
             >
