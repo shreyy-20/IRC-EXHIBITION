@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import type { ClubbedExhibitor } from '../data/clubbedExhibitors';
 import type { RoutePath, NavNode } from '../data/venueGraph';
-import { FLOOR_PATHWAYS, type FloorPathway } from '../data/floorPathways';
+import { FLOOR_PATHWAYS } from '../data/floorPathways';
 import type { HallTab } from './HallSelector';
 
 type Props = {
@@ -43,6 +43,8 @@ type Props = {
   hasArrived?: boolean;
   onManualStepAdvance?: () => void;
   onReanchorCheckpoint?: () => void;
+  startCoords?: { x: number; y: number };
+  startLabel?: string;
 };
 
 type ViewBox = {
@@ -247,6 +249,8 @@ export default function InteractiveFloorMap({
   hasArrived = false,
   onManualStepAdvance,
   onReanchorCheckpoint,
+  startCoords,
+  startLabel,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -254,8 +258,6 @@ export default function InteractiveFloorMap({
   const [view, setView] = useState<ViewBox>(VIEW_PRESETS[activeHall]);
   const [, setZoom] = useState(1);
   const [dragging, setDragging] = useState(false);
-  const [hoveredExhibitor, setHoveredExhibitor] = useState<ClubbedExhibitor | null>(null);
-  const [hoveredPathway, setHoveredPathway] = useState<FloorPathway | null>(null);
   const showAisleLabels = false;
 
   // Zoom scale and Level-of-Detail (LOD) detection
@@ -319,11 +321,14 @@ export default function InteractiveFloorMap({
     if (isNavigatingLive && liveCoords) {
       return liveCoords;
     }
+    if (startCoords) {
+      return startCoords;
+    }
     if (route && route.nodes.length > 0) {
       return { x: route.nodes[0].x, y: route.nodes[0].y };
     }
     return { x: 1200, y: 830 };
-  }, [isNavigatingLive, liveCoords, route]);
+  }, [isNavigatingLive, liveCoords, startCoords, route]);
 
   // User Heading / Compass Bearing
   const userBearing = useMemo(() => {
@@ -464,6 +469,13 @@ export default function InteractiveFloorMap({
 
   function handlePointerDown(e: PointerEvent<SVGSVGElement>) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    // Completely isolate stall selection from map dragging/panning
+    const target = e.target as Element | null;
+    if (target && target.closest && target.closest('.interactive-booth-group')) {
+      return;
+    }
+
     setIsCameraFollowEnabled(false);
 
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -963,7 +975,6 @@ export default function InteractiveFloorMap({
           <g id="floor-pathways-layer">
             {visiblePathways.map((pathway) => {
               const isTraversed = route?.pathwayIds.includes(pathway.id);
-              const isHovered = hoveredPathway?.id === pathway.id;
 
               let fillColor = 'url(#aisleTile)';
               let strokeColor = '#cbd5e1';
@@ -988,18 +999,8 @@ export default function InteractiveFloorMap({
                 fillOpacity = 1;
               }
 
-              if (isHovered) {
-                strokeColor = '#2563eb';
-                strokeWidth = 2.5;
-              }
-
               return (
-                <g
-                  key={pathway.id}
-                  className="floor-pathway-segment"
-                  onPointerEnter={() => setHoveredPathway(pathway)}
-                  onPointerLeave={() => setHoveredPathway(null)}
-                >
+                <g key={pathway.id} className="floor-pathway-segment">
                   <rect
                     x={pathway.x}
                     y={pathway.y}
@@ -1064,7 +1065,6 @@ export default function InteractiveFloorMap({
           <g id="exhibitor-booths">
             {visibleExhibitors.map((ex) => {
               const isSelected = selectedExhibitor?.id === ex.id;
-              const isHovered = hoveredExhibitor?.id === ex.id;
 
               const badge = getStallBadge(ex);
               const stripeH = Math.min(15, Math.max(5, ex.height * 0.16));
@@ -1085,24 +1085,18 @@ export default function InteractiveFloorMap({
                   className={`interactive-booth-group ${isSelected ? 'is-selected' : ''}`}
                   cursor="pointer"
                   onClick={(e) => {
-                    if (!isDraggingRef.current) {
-                      e.stopPropagation();
-                      onSelectExhibitor(ex);
-                    }
+                    e.stopPropagation();
+                    onSelectExhibitor(ex);
                   }}
                   onPointerUp={(e) => {
-                    if (!isDraggingRef.current) {
-                      e.stopPropagation();
-                      onSelectExhibitor(ex);
-                    }
+                    e.stopPropagation();
+                    onSelectExhibitor(ex);
                   }}
-                  onPointerEnter={() => setHoveredExhibitor(ex)}
-                  onPointerLeave={() => setHoveredExhibitor(null)}
                   role="button"
                   tabIndex={0}
                   aria-label={ex.companyName}
                 >
-                  {/* Invisible expanded touch hit target (ensures effortless finger selection on mobile) */}
+                  {/* Invisible expanded touch hit target (ensures effortless finger selection on mobile & touchscreen) */}
                   <rect
                     x={ex.x - 4}
                     y={ex.y - 4}
@@ -1112,29 +1106,30 @@ export default function InteractiveFloorMap({
                     pointerEvents="all"
                   />
 
-                  {/* Subtle outer glow / selection halo */}
-                  {(isSelected || isHovered) && (
+                  {/* Subtle outer glow / selection halo only when selected */}
+                  {isSelected && (
                     <rect
                       x={ex.x - 3}
                       y={ex.y - 3}
                       width={ex.width + 6}
                       height={ex.height + 6}
                       rx="8"
-                      fill={isSelected ? '#ea580c' : '#38bdf8'}
-                      opacity={isSelected ? 0.35 : 0.25}
+                      fill="#ea580c"
+                      opacity={0.35}
                     />
                   )}
 
                   {/* Main White Card Body */}
                   <rect
+                    className="booth-body-rect"
                     x={ex.x}
                     y={ex.y}
                     width={ex.width}
                     height={ex.height}
                     rx="6"
                     fill="#ffffff"
-                    stroke={isSelected ? '#ea580c' : isHovered ? '#0284c7' : '#cbd5e1'}
-                    strokeWidth={isSelected ? 3.5 : isHovered ? 2 : 1.2}
+                    stroke={isSelected ? '#ea580c' : '#cbd5e1'}
+                    strokeWidth={isSelected ? 3.5 : 1.2}
                     filter="drop-shadow(0 2px 4px rgba(0,0,0,0.06))"
                   />
 
@@ -1287,7 +1282,7 @@ export default function InteractiveFloorMap({
                 textAnchor="middle"
                 letterSpacing="0.4"
               >
-                You are here
+                {startLabel ? (startLabel.length > 14 ? 'You are here' : startLabel) : 'You are here'}
               </text>
               {/* Downward pointer triangle */}
               <polygon points="-5,2 5,2 0,7" fill="#0f2942" />
@@ -1350,15 +1345,7 @@ export default function InteractiveFloorMap({
           </button>
         )}
 
-        {/* Information Tooltip for Exhibitors */}
-        {hoveredExhibitor && !route && (
-          <div className="map-floating-tooltip" style={{ left: '20px', bottom: '20px' }}>
-            <div className="tooltip-header">
-              <strong>{hoveredExhibitor.companyName}</strong>
-              <span className="tooltip-badge">{hoveredExhibitor.hall}</span>
-            </div>
-          </div>
-        )}
+
 
         {/* ========================================================
             REAL-TIME MOBILE INDOOR NAVIGATION CONTROLLER

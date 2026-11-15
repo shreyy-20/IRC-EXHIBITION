@@ -25,12 +25,14 @@ import {
   ArrowUp,
   ExternalLink,
   Smartphone,
+  Home,
 } from 'lucide-react';
 
 import { clubbedExhibitors, type ClubbedExhibitor } from './data/clubbedExhibitors';
 import { findShortestPath, type RoutePath } from './data/venueGraph';
 import {
   resolveInitialPosition,
+  resolveKioskId,
   PHYSICAL_KIOSKS,
   QR_CHECKPOINTS,
   buildCheckpointNavUrl,
@@ -178,16 +180,15 @@ export default function App() {
     const cpParam = params.get('checkpoint') || params.get('cp');
     const kioskParam = params.get('kiosk');
     const destParam = params.get('destination') || params.get('stall');
-
-    if (kioskParam && PHYSICAL_KIOSKS[kioskParam]) {
-      const k = PHYSICAL_KIOSKS[kioskParam];
+    const matchedKiosk = resolveKioskId(kioskParam);
+    if (matchedKiosk) {
       setPositionState({
         source: 'kiosk',
-        id: k.id,
-        label: k.name,
-        nodeId: k.nodeId,
-        hall: k.hall,
-        coords: { x: k.x, y: k.y },
+        id: matchedKiosk.id,
+        label: matchedKiosk.name,
+        nodeId: matchedKiosk.nodeId,
+        hall: matchedKiosk.hall,
+        coords: { x: matchedKiosk.x, y: matchedKiosk.y },
         headingDeg: null,
         timestamp: Date.now(),
       });
@@ -243,6 +244,11 @@ export default function App() {
     setActiveStepIndex(0);
     setIsNavigatingLive(false);
 
+    // Synchronously calculate route from current kiosk position to target stall
+    const targetNode = exhibitor.accessNodeId || 'hall1_node_b2';
+    const path = findShortestPath(positionState.nodeId, targetNode);
+    setActiveRoute(path);
+
     // On Kiosk display, open the side directions drawer.
     // On Mobile phones, do NOT cover the map with a full drawer:
     // keep the drawer closed so the floor map and drawn route remain 100% visible,
@@ -253,13 +259,22 @@ export default function App() {
     } else {
       setDrawerOpen(false);
     }
+  }, [isMobile, positionState.nodeId]);
 
-    if (exhibitor.hall === 'Hall-1' && activeHall === 'hanger') {
-      setActiveHall('hall-1');
-    } else if (exhibitor.hall === 'Hanger' && activeHall === 'hall-1') {
-      setActiveHall('hanger');
-    }
-  }, [isMobile, activeHall]);
+  // Back to Main Page: resets destination, route, and drawer to clean overview while preserving active kiosk
+  const handleBackToMainPage = useCallback(() => {
+    setSelectedExhibitor(null);
+    setActiveRoute(null);
+    setActiveStepIndex(0);
+    setIsNavigatingLive(false);
+    setDrawerOpen(false);
+    setDirectoryQuery('');
+    setLiveCoords(null);
+    setLiveHeading(null);
+    setLiveWalkedMeters(0);
+    setLiveStatusText('');
+    setHasArrived(false);
+  }, []);
 
   // Start Live Indoor Navigation (Strictly on mobile devices / mobile view)
   const handleStartNavigation = useCallback(() => {
@@ -455,10 +470,11 @@ export default function App() {
 
   // Switch start location
   function handleSelectStartLocation(type: 'kiosk' | 'qr_checkpoint', id: string) {
+    let newPos: PositioningState | null = null;
     if (type === 'kiosk') {
-      const k = PHYSICAL_KIOSKS[id];
+      const k = resolveKioskId(id) || PHYSICAL_KIOSKS[id];
       if (k) {
-        setPositionState({
+        newPos = {
           source: 'kiosk',
           id: k.id,
           label: k.name,
@@ -467,12 +483,12 @@ export default function App() {
           coords: { x: k.x, y: k.y },
           headingDeg: null,
           timestamp: Date.now(),
-        });
+        };
       }
     } else {
       const cp = QR_CHECKPOINTS.find((c) => c.id === id);
       if (cp) {
-        setPositionState({
+        newPos = {
           source: 'qr_checkpoint',
           id: cp.id,
           label: `${cp.code} — ${cp.label}`,
@@ -481,7 +497,15 @@ export default function App() {
           coords: { x: cp.x, y: cp.y },
           headingDeg: null,
           timestamp: Date.now(),
-        });
+        };
+      }
+    }
+    if (newPos) {
+      setPositionState(newPos);
+      if (selectedExhibitor) {
+        const targetNode = selectedExhibitor.accessNodeId || 'hall1_node_b2';
+        const path = findShortestPath(newPos.nodeId, targetNode);
+        setActiveRoute(path);
       }
     }
     setShowLocationModal(false);
@@ -637,6 +661,17 @@ export default function App() {
             </button>
           </div>
 
+          {/* Persistent Back to Main Page Button */}
+          <button
+            type="button"
+            className="ref-home-btn"
+            onClick={handleBackToMainPage}
+            title="Return to main exhibition overview"
+          >
+            <Home size={15} />
+            <span>MAIN PAGE</span>
+          </button>
+
           {/* Directory Drawer Toggle button */}
           <button
             type="button"
@@ -716,6 +751,8 @@ export default function App() {
             hasArrived={hasArrived}
             onManualStepAdvance={handleManualStepAdvance}
             onReanchorCheckpoint={handleReanchorCheckpoint}
+            startCoords={positionState.coords}
+            startLabel={positionState.label}
           />
         </div>
 
@@ -973,27 +1010,58 @@ export default function App() {
             <div className="location-group-section">
               <h4>
                 <MapPin size={16} />
-                Physical Touchscreen Kiosks
+                Hangar 1 Touchscreen Kiosks (Hall-1)
               </h4>
               <div className="location-options-list">
-                {Object.values(PHYSICAL_KIOSKS).map((k) => (
-                  <button
-                    key={k.id}
-                    type="button"
-                    className={`location-option-item ${positionState.id === k.id ? 'is-current' : ''}`}
-                    onClick={() => handleSelectStartLocation('kiosk', k.id)}
-                  >
-                    <div className="loc-info">
-                      <strong>{k.name}</strong>
-                      <span>{k.locationName} · {k.hall}</span>
-                    </div>
-                    {positionState.id === k.id ? (
-                      <span className="current-badge">Selected</span>
-                    ) : (
-                      <ChevronRight size={17} className="chevron" />
-                    )}
-                  </button>
-                ))}
+                {Object.values(PHYSICAL_KIOSKS)
+                  .filter((k) => k.hall === 'Hall-1')
+                  .map((k) => (
+                    <button
+                      key={k.id}
+                      type="button"
+                      className={`location-option-item ${positionState.id === k.id ? 'is-current' : ''}`}
+                      onClick={() => handleSelectStartLocation('kiosk', k.id)}
+                    >
+                      <div className="loc-info">
+                        <strong>{k.name}</strong>
+                        <span>{k.locationName} · {k.hall}</span>
+                      </div>
+                      {positionState.id === k.id ? (
+                        <span className="current-badge">Active</span>
+                      ) : (
+                        <ChevronRight size={17} className="chevron" />
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            <div className="location-group-section">
+              <h4>
+                <MapPin size={16} />
+                Hangar 2 Touchscreen Kiosks (Hanger)
+              </h4>
+              <div className="location-options-list">
+                {Object.values(PHYSICAL_KIOSKS)
+                  .filter((k) => k.hall === 'Hanger')
+                  .map((k) => (
+                    <button
+                      key={k.id}
+                      type="button"
+                      className={`location-option-item ${positionState.id === k.id ? 'is-current' : ''}`}
+                      onClick={() => handleSelectStartLocation('kiosk', k.id)}
+                    >
+                      <div className="loc-info">
+                        <strong>{k.name}</strong>
+                        <span>{k.locationName} · {k.hall}</span>
+                      </div>
+                      {positionState.id === k.id ? (
+                        <span className="current-badge">Active</span>
+                      ) : (
+                        <ChevronRight size={17} className="chevron" />
+                      )}
+                    </button>
+                  ))}
               </div>
             </div>
 

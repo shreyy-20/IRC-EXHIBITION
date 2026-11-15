@@ -35,39 +35,107 @@ export type PositioningState = {
   timestamp: number;
 };
 
-// Authoritative Physical Kiosks at HITEX Hyderabad Venue
+// Authoritative 8 Physical Kiosks across Both Hangars (4 in Hangar 1, 4 in Hangar 2)
 export const PHYSICAL_KIOSKS: Record<string, PhysicalKiosk> = {
-  kiosk_entrance: {
-    id: 'kiosk_entrance',
-    name: 'Kiosk 1 — Main Entrance',
-    locationName: 'Registration Foyer & Main Gate',
+  // Hangar 1 (Hall-1)
+  kiosk_1: {
+    id: 'kiosk_1',
+    name: 'Kiosk 1 — Hangar 1 Main Entrance & Foyer',
+    locationName: 'Registration Foyer / Main Gate',
     nodeId: 'entrance_main',
     x: 1200,
     y: 830,
     hall: 'Hall-1',
-    description: 'Touchscreen terminal at the visitor registration and security entrance.',
+    description: 'Touchscreen kiosk at the main visitor registration entrance and security gate.',
   },
-  kiosk_hall1_center: {
-    id: 'kiosk_hall1_center',
-    name: 'Kiosk 2 — Hall-1 Central Hub',
+  kiosk_2: {
+    id: 'kiosk_2',
+    name: 'Kiosk 2 — Hangar 1 West Aisle & Passage Access',
+    locationName: 'West Aisle Junction near Connecting Passage',
+    nodeId: 'hall1_mid_w',
+    x: 890,
+    y: 520,
+    hall: 'Hall-1',
+    description: 'Touchscreen kiosk serving Western Hall-1 stalls and inter-hangar passage.',
+  },
+  kiosk_3: {
+    id: 'kiosk_3',
+    name: 'Kiosk 3 — Hangar 1 Central Grand Promenade',
     locationName: 'Hall-1 6.0M Central Grand Aisle',
     nodeId: 'hall1_mid_c1',
     x: 1070,
     y: 520,
     hall: 'Hall-1',
-    description: 'Touchscreen kiosk between Platinum sponsor stalls and central aisle.',
+    description: 'Central touchscreen kiosk between Platinum sponsors and central aisle.',
   },
-  kiosk_hanger_hub: {
-    id: 'kiosk_hanger_hub',
-    name: 'Kiosk 3 — Hanger Central Hub',
-    locationName: 'Ramappa Temple Theme Pavilion Promenade',
+  kiosk_4: {
+    id: 'kiosk_4',
+    name: 'Kiosk 4 — Hangar 1 North-East Wing',
+    locationName: 'North-East 4.0M Corridor',
+    nodeId: 'hall1_north_e',
+    x: 1450,
+    y: 320,
+    hall: 'Hall-1',
+    description: 'Touchscreen kiosk serving northern stalls and eastern sponsor pavilion.',
+  },
+
+  // Hangar 2 (Hanger)
+  kiosk_5: {
+    id: 'kiosk_5',
+    name: 'Kiosk 5 — Hangar 2 East Passage Arrival Hub',
+    locationName: 'Hanger East Aisle / Passage Exit',
+    nodeId: 'hanger_east_mid',
+    x: 690,
+    y: 450,
+    hall: 'Hanger',
+    description: 'Touchscreen kiosk directly at arrival from the covered connecting passage.',
+  },
+  kiosk_6: {
+    id: 'kiosk_6',
+    name: 'Kiosk 6 — Hangar 2 Central Theme Pavilion Hub',
+    locationName: 'Ramappa Temple Pavilion Concourse',
     nodeId: 'hanger_mid_ramappa_n',
     x: 470,
     y: 390,
     hall: 'Hanger',
-    description: 'Touchscreen kiosk adjacent to the 18m × 6m Ramappa Temple landmark.',
+    description: 'Touchscreen kiosk adjacent to the Ramappa Temple central landmark pavilion.',
+  },
+  kiosk_7: {
+    id: 'kiosk_7',
+    name: 'Kiosk 7 — Hangar 2 West Gate & Meeting Concourse',
+    locationName: 'Hanger West 3.0M Aisle near West Gate 2',
+    nodeId: 'hanger_west_mid',
+    x: 250,
+    y: 450,
+    hall: 'Hanger',
+    description: 'Touchscreen kiosk near West Gate 2, Photobooth and Meeting Space.',
+  },
+  kiosk_8: {
+    id: 'kiosk_8',
+    name: 'Kiosk 8 — Hangar 2 North Pavilion Promenade',
+    locationName: 'Hanger North Aisle Junction',
+    nodeId: 'hanger_mid_top',
+    x: 470,
+    y: 140,
+    hall: 'Hanger',
+    description: 'Touchscreen kiosk serving northern pavilion stalls and dining lawn access.',
   },
 };
+
+export function resolveKioskId(rawParam: string | null): PhysicalKiosk | null {
+  if (!rawParam) return null;
+  const p = rawParam.toLowerCase().trim();
+  if (PHYSICAL_KIOSKS[p]) return PHYSICAL_KIOSKS[p];
+  if (PHYSICAL_KIOSKS[`kiosk_${p}`]) return PHYSICAL_KIOSKS[`kiosk_${p}`];
+  const num = parseInt(p, 10);
+  if (!isNaN(num) && num >= 1 && num <= 8) {
+    return PHYSICAL_KIOSKS[`kiosk_${num}`] || null;
+  }
+  if (p === 'kiosk_entrance') return PHYSICAL_KIOSKS['kiosk_1'];
+  if (p === 'kiosk_hall1_center') return PHYSICAL_KIOSKS['kiosk_3'];
+  if (p === 'kiosk_hanger_hub') return PHYSICAL_KIOSKS['kiosk_6'];
+  return null;
+}
 
 // Physical QR Wayfinding Checkpoints installed throughout the exhibition
 export const QR_CHECKPOINTS: QRCheckpoint[] = [
@@ -156,13 +224,14 @@ export const QR_CHECKPOINTS: QRCheckpoint[] = [
  */
 export function resolveInitialPosition(): PositioningState {
   if (typeof window === 'undefined') {
+    const k1 = PHYSICAL_KIOSKS['kiosk_1'];
     return {
       source: 'kiosk',
-      id: 'kiosk_entrance',
-      label: 'Kiosk 1 — Main Entrance',
-      nodeId: 'entrance_main',
-      hall: 'Hall-1',
-      coords: { x: 1200, y: 830 },
+      id: k1.id,
+      label: k1.name,
+      nodeId: k1.nodeId,
+      hall: k1.hall,
+      coords: { x: k1.x, y: k1.y },
       headingDeg: null,
       timestamp: Date.now(),
     };
@@ -170,17 +239,17 @@ export function resolveInitialPosition(): PositioningState {
 
   const params = new URLSearchParams(window.location.search);
 
-  // 1. Kiosk parameter (?kiosk=kiosk_hall1_center)
+  // 1. Kiosk parameter (?kiosk=kiosk_1 .. kiosk_8 or numeric ?kiosk=1 .. 8)
   const kioskParam = params.get('kiosk');
-  if (kioskParam && PHYSICAL_KIOSKS[kioskParam]) {
-    const k = PHYSICAL_KIOSKS[kioskParam];
+  const matchedKiosk = resolveKioskId(kioskParam);
+  if (matchedKiosk) {
     return {
       source: 'kiosk',
-      id: k.id,
-      label: k.name,
-      nodeId: k.nodeId,
-      hall: k.hall,
-      coords: { x: k.x, y: k.y },
+      id: matchedKiosk.id,
+      label: matchedKiosk.name,
+      nodeId: matchedKiosk.nodeId,
+      hall: matchedKiosk.hall,
+      coords: { x: matchedKiosk.x, y: matchedKiosk.y },
       headingDeg: null,
       timestamp: Date.now(),
     };
@@ -206,17 +275,8 @@ export function resolveInitialPosition(): PositioningState {
     }
   }
 
-  // 3. Fallback default
-  const defaultKiosk = PHYSICAL_KIOSKS?.kiosk_entrance || {
-    id: 'kiosk_entrance',
-    name: 'Kiosk 1 — Main Entrance',
-    locationName: 'Registration Foyer & Main Gate',
-    nodeId: 'entrance_main',
-    x: 1200,
-    y: 830,
-    hall: 'Hall-1' as const,
-    description: 'Touchscreen terminal at the visitor registration and security entrance.',
-  };
+  // 3. Fallback default: Kiosk 1 (Hangar 1 Main Entrance)
+  const defaultKiosk = PHYSICAL_KIOSKS['kiosk_1'];
   return {
     source: 'kiosk',
     id: defaultKiosk.id,
