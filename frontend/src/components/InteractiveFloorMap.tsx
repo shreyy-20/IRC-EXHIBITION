@@ -1,11 +1,7 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import type { PointerEvent, WheelEvent } from 'react';
 import {
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
   Maximize2,
-  Navigation2,
   Crosshair,
   Play,
   Pause,
@@ -18,6 +14,9 @@ import {
   DoorOpen,
   CheckCircle2,
   Compass,
+  Plus,
+  Minus,
+  Search,
 } from 'lucide-react';
 import type { ClubbedExhibitor } from '../data/clubbedExhibitors';
 import type { RoutePath, NavNode } from '../data/venueGraph';
@@ -35,6 +34,8 @@ type Props = {
   onExitNavigation?: () => void;
   isNavigatingLive?: boolean;
   onStartNavigation?: () => void;
+  onShowDirections?: () => void;
+  drawerOpen?: boolean;
 };
 
 type ViewBox = {
@@ -163,6 +164,26 @@ function getWrappedLines(
   return { lines, fontSize, lineHeight };
 }
 
+export function getStallBadge(ex: ClubbedExhibitor): { tag: string; stripeColor: string; bg: string } {
+  const cat = (ex.category || '').toLowerCase();
+  const id = (ex.id || '').toLowerCase();
+  const firstStall = ex.stalls && ex.stalls.length > 0 ? ex.stalls[0] : '';
+
+  if (cat.includes('gold') || id.includes('gold')) {
+    return { tag: `GOLD-${firstStall || '5'}`, stripeColor: '#f59e0b', bg: '#fefce8' };
+  }
+  if (cat.includes('diamond') || id.includes('diamond')) {
+    return { tag: `DIAMOND-${firstStall || '3'}`, stripeColor: '#0ea5e9', bg: '#f0f9ff' };
+  }
+  if (cat.includes('platinum') || id.includes('platinum')) {
+    return { tag: `PLATINUM-${firstStall || '2'}`, stripeColor: '#64748b', bg: '#f8fafc' };
+  }
+  if (cat.includes('principal') || id.includes('principal')) {
+    return { tag: 'PRINCIPAL', stripeColor: '#8b5cf6', bg: '#faf5ff' };
+  }
+  return { tag: firstStall ? `BOOTH ${firstStall}` : 'EXHIBITOR', stripeColor: '#3b82f6', bg: '#ffffff' };
+}
+
 export default function InteractiveFloorMap({
   exhibitors,
   selectedExhibitor,
@@ -173,13 +194,14 @@ export default function InteractiveFloorMap({
   onSelectStep,
   onExitNavigation,
   isNavigatingLive = false,
-  onStartNavigation,
+  onShowDirections,
+  drawerOpen = false,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [view, setView] = useState<ViewBox>(VIEW_PRESETS[activeHall]);
-  const [zoom, setZoom] = useState(1);
+  const [, setZoom] = useState(1);
   const [dragging, setDragging] = useState(false);
   const [hoveredExhibitor, setHoveredExhibitor] = useState<ClubbedExhibitor | null>(null);
   const [hoveredPathway, setHoveredPathway] = useState<FloorPathway | null>(null);
@@ -444,15 +466,6 @@ export default function InteractiveFloorMap({
     }
   }
 
-  function toggleFullscreen() {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
-  }
-
   function handleWheel(e: WheelEvent<SVGSVGElement>) {
     e.preventDefault();
     setIsCameraFollowEnabled(false);
@@ -532,18 +545,6 @@ export default function InteractiveFloorMap({
         route.nodes.slice(1).map((n) => `L ${n.x} ${n.y}`).join(' ')
       : '';
 
-  // Calculate direction arrows along route segments
-  const routeArrows =
-    route && route.nodes.length > 1
-      ? route.nodes.slice(0, -1).map((fromNode, i) => {
-          const toNode = route.nodes[i + 1];
-          const midX = (fromNode.x + toNode.x) / 2;
-          const midY = (fromNode.y + toNode.y) / 2;
-          const angle = (Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x) * 180) / Math.PI;
-          return { id: `arrow-${i}`, midX, midY, angle, stepIndex: i + 1 };
-        })
-      : [];
-
   const currentStep =
     route?.steps && currentStepIndex !== null && currentStepIndex !== undefined
       ? route.steps[currentStepIndex] || route.steps[0]
@@ -573,58 +574,37 @@ export default function InteractiveFloorMap({
 
   return (
     <div className="interactive-map-wrapper" ref={containerRef}>
-      {/* Map Header Toolbar */}
-      <div className="map-toolbar">
-        <div className="map-title-zone">
-          <strong>
-            {activeHall === 'all'
-              ? 'Exhibition Floor Map · All Halls'
-              : activeHall === 'hall-1'
-                ? 'Hall-1 Floor Map'
-                : 'Hanger Floor Map'}
-          </strong>
-        </div>
-
-        <div className="map-actions-group">
-          <div className="map-zoom-buttons">
-            <button
-              type="button"
-              onClick={() => changeZoom(0.8)}
-              title="Zoom In"
-              aria-label="Zoom in"
-            >
-              <ZoomIn size={17} />
-            </button>
-            <button
-              type="button"
-              onClick={() => changeZoom(1.25)}
-              title="Zoom Out"
-              aria-label="Zoom out"
-            >
-              <ZoomOut size={17} />
-            </button>
-            <button
-              type="button"
-              onClick={resetView}
-              title="Reset View"
-              aria-label="Reset view"
-            >
-              <RotateCcw size={15} />
-            </button>
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              title="Full Screen Map"
-              aria-label="Full screen"
-            >
-              <Maximize2 size={15} />
-            </button>
-          </div>
-          <span className="zoom-text">{Math.round(zoom * 100)}%</span>
-        </div>
+      {/* Floating Vertical Zoom Pill (Reference Image 1) */}
+      <div className="reference-zoom-pill" aria-label="Map Zoom and Fit Controls">
+        <button
+          type="button"
+          onClick={() => changeZoom(0.8)}
+          title="Zoom In"
+          aria-label="Zoom in"
+        >
+          <Plus size={18} />
+        </button>
+        <div className="zoom-pill-divider" />
+        <button
+          type="button"
+          onClick={() => changeZoom(1.25)}
+          title="Zoom Out"
+          aria-label="Zoom out"
+        >
+          <Minus size={18} />
+        </button>
+        <div className="zoom-pill-divider" />
+        <button
+          type="button"
+          onClick={resetView}
+          title="Reset and Fit Floor Plan"
+          aria-label="Fit floor plan"
+        >
+          <Maximize2 size={16} />
+        </button>
       </div>
 
-      {/* SVG Canvas Container with Google Maps Overlays */}
+      {/* SVG Canvas Container with Overlays */}
       <div className="svg-canvas-container">
         {/* ========================================================
             GOOGLE MAPS FLOATING TOP NAVIGATION HUD (LIVE NAVIGATION)
@@ -683,47 +663,32 @@ export default function InteractiveFloorMap({
         )}
 
         {/* ========================================================
-            ROUTE PREVIEW FLOATING CARD (DESTINATION SELECTED PREVIEW)
+            BOTTOM FLOATING ROUTE STRIP (REFERENCE IMAGE 1)
            ======================================================== */}
-        {route && !isNavigatingLive && (
-          <div className="google-nav-preview-card">
-            <div className="preview-card-info">
-              <div className="preview-destination-badge">
-                <Navigation2 size={14} />
-                <span>ROUTE PREVIEW</span>
-              </div>
-              <h3 className="preview-destination-name">
-                {selectedExhibitor?.companyName || 'Selected Destination'}
-              </h3>
-              <div className="preview-metrics-row">
-                <span className="metric-pill dist">
-                  <strong>{route.distanceMeters} m</strong>
-                </span>
-                <span className="metric-pill time">
-                  <strong>{route.walkingMinutes} min</strong> walk
-                </span>
-                <span className="metric-pill hall">{selectedExhibitor?.hall}</span>
-              </div>
-            </div>
-            <div className="preview-actions">
+        {route && !drawerOpen && !isNavigatingLive && (
+          <div className="reference-bottom-route-bar">
+            <div className="reference-route-summary-card">
+              <span className="ref-route-meters">{route.distanceMeters} m</span>
+              <span className="ref-route-text">about {route.walkingMinutes} min walk from Main Gate</span>
               <button
                 type="button"
-                className="preview-start-nav-btn"
-                onClick={() => onStartNavigation?.()}
-                title="Start live turn-by-turn indoor navigation"
-              >
-                <Play size={16} fill="currentColor" />
-                <span>START NAVIGATION</span>
-              </button>
-              <button
-                type="button"
-                className="preview-cancel-btn"
+                className="ref-route-end-btn"
                 onClick={() => onExitNavigation?.()}
-                title="Clear route"
+                title="End route"
               >
-                <X size={17} />
+                End route
               </button>
             </div>
+            <button
+              type="button"
+              className="ref-show-directions-btn"
+              onClick={() => onShowDirections?.()}
+              title="Show turn-by-turn directions"
+            >
+              <Search size={16} />
+              <span>Show directions</span>
+              <span className="ref-sparkle-dot" />
+            </button>
           </div>
         )}
 
@@ -801,123 +766,108 @@ export default function InteractiveFloorMap({
           <rect x="-1000" y="-1000" width="3600" height="2900" fill="#f1f5f9" />
 
           {/* ========================================================
-              HANGER REGION (LEFT)
+              PERIMETER WALLS & GATES (REFERENCE IMAGE 1)
              ======================================================== */}
-          <g id="hanger-boundary">
-            <rect
-              x="65"
-              y="65"
-              width="680"
-              height="770"
-              rx="12"
-              fill="#ffffff"
-              stroke="#cbd5e1"
-              strokeWidth="2.5"
-            />
-            <rect x="65" y="65" width="680" height="34" rx="8" fill="#1e293b" />
-            <text
-              x="405"
-              y="88"
-              fill="#f8fafc"
-              fontSize="14"
-              fontWeight="800"
-              textAnchor="middle"
-              letterSpacing="2"
-            >
-              HANGER
-            </text>
-          </g>
+          <g id="reference-perimeter-and-gates">
+            {/* North Wall */}
+            <line x1="65" y1="65" x2="1530" y2="65" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
+            {/* East Wall */}
+            <line x1="1530" y1="65" x2="1530" y2="830" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
 
-          {/* ========================================================
-              CONNECTING PASSAGE (BETWEEN HANGER & HALL-1)
-             ======================================================== */}
-          <g id="inter-hall-passage">
-            <rect
-              x="745"
-              y="412"
-              width="105"
-              height="76"
-              fill="url(#passageHatch)"
-              stroke="#f97316"
-              strokeWidth="2"
-            />
-            <rect x="745" y="412" width="105" height="76" fill="#fff7ed" opacity="0.9" />
-            <line x1="745" y1="412" x2="745" y2="488" stroke="#c2410c" strokeWidth="3" />
-            <line x1="850" y1="412" x2="850" y2="488" stroke="#c2410c" strokeWidth="3" />
+            {/* West Wall with WEST GATE 2 opening */}
+            <line x1="65" y1="65" x2="65" y2="400" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
+            <line x1="65" y1="500" x2="65" y2="830" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
 
-            <text
-              x="797"
-              y="445"
-              fill="#c2410c"
-              fontSize="11"
-              fontWeight="800"
-              textAnchor="middle"
-              letterSpacing="1"
-            >
-              PASSAGE
-            </text>
-            <text
-              x="797"
-              y="465"
-              fill="#ea580c"
-              fontSize="9"
-              fontWeight="700"
-              textAnchor="middle"
-            >
-              Hall-1 ⇄ Hanger
-            </text>
-          </g>
+            {/* South Wall with GATE 1 and MAIN GATE openings */}
+            <line x1="65" y1="830" x2="880" y2="830" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
+            <line x1="1000" y1="830" x2="1120" y2="830" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
+            <line x1="1280" y1="830" x2="1530" y2="830" stroke="#1e293b" strokeWidth="4" strokeLinecap="round" />
 
-          {/* ========================================================
-              HALL-1 REGION (RIGHT)
-             ======================================================== */}
-          <g id="hall1-boundary">
-            <rect
-              x="850"
-              y="65"
-              width="680"
-              height="770"
-              rx="12"
-              fill="#ffffff"
-              stroke="#cbd5e1"
-              strokeWidth="2.5"
-            />
-            <rect x="850" y="65" width="680" height="34" rx="8" fill="#143a5b" />
-            <text
-              x="1190"
-              y="88"
-              fill="#f8fafc"
-              fontSize="14"
-              fontWeight="800"
-              textAnchor="middle"
-              letterSpacing="2"
-            >
-              HALL-1
-            </text>
-
-            {/* Main Entrance */}
-            <g id="main-entrance">
-              <rect
-                x="1140"
-                y="805"
-                width="120"
-                height="32"
-                rx="6"
-                fill="#15803d"
-                stroke="#166534"
-                strokeWidth="2"
-              />
+            {/* WEST GATE 2 label and chevron arrow */}
+            <g id="west-gate-2" transform="translate(50, 450)">
               <text
-                x="1200"
-                y="826"
-                fill="#ffffff"
-                fontSize="11"
+                x="-12"
+                y="4"
+                fill="#1e293b"
+                fontSize="13"
+                fontWeight="800"
+                textAnchor="end"
+                letterSpacing="1"
+                transform="rotate(-90 -12 4)"
+              >
+                WEST GATE 2
+              </text>
+              <polygon points="5,-8 16,0 5,8" fill="#1e293b" />
+            </g>
+
+            {/* GATE 1 label and chevron arrow */}
+            <g id="gate-1" transform="translate(940, 860)">
+              <text x="0" y="0" fill="#1e293b" fontSize="13" fontWeight="800" textAnchor="middle" letterSpacing="1">
+                GATE 1
+              </text>
+              <polygon points="-8,-12 0,-20 8,-12" fill="#1e293b" />
+            </g>
+
+            {/* MAIN GATE label and double chevrons */}
+            <g id="main-gate" transform="translate(1200, 860)">
+              <text x="0" y="0" fill="#1e293b" fontSize="14" fontWeight="800" textAnchor="middle" letterSpacing="1">
+                MAIN GATE
+              </text>
+              <polygon points="-9,-12 0,-21 9,-12" fill="#1e293b" />
+              <polygon points="-9,-6 0,-15 9,-6" fill="#1e293b" />
+            </g>
+          </g>
+
+          {/* ========================================================
+              VENUE LANDMARKS (PHOTOBOOTH, MEETING SPACE, ISNT PAVILION, POSTER DISPLAY)
+             ======================================================== */}
+          <g id="venue-landmarks">
+            {/* PHOTOBOOTH (Bottom Left) */}
+            <g id="landmark-photobooth">
+              <rect x="80" y="690" width="145" height="110" rx="8" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
+              <text x="152" y="750" fill="#334155" fontSize="13" fontWeight="800" textAnchor="middle" letterSpacing="1">
+                PHOTOBOOTH
+              </text>
+            </g>
+
+            {/* MEETING SPACE (Middle Left) */}
+            <g id="landmark-meetingspace">
+              <rect x="80" y="550" width="145" height="95" rx="8" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
+              <text x="152" y="602" fill="#334155" fontSize="13" fontWeight="800" textAnchor="middle" letterSpacing="1">
+                MEETING SPACE
+              </text>
+            </g>
+
+            {/* ISNT PAVILION (Bottom Right) */}
+            <g id="landmark-isntpavilion">
+              <rect x="1320" y="660" width="150" height="120" rx="8" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
+              <text x="1395" y="725" fill="#334155" fontSize="13" fontWeight="800" textAnchor="middle" letterSpacing="1">
+                ISNT PAVILION
+              </text>
+            </g>
+
+            {/* POSTER / DIGITAL DISPLAY (Right Wall Vertical Strip) */}
+            <g id="landmark-posterdisplay">
+              <rect x="1530" y="140" width="45" height="580" rx="6" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
+              <text
+                x="1552"
+                y="430"
+                fill="#334155"
+                fontSize="13"
                 fontWeight="800"
                 textAnchor="middle"
-                letterSpacing="1"
+                letterSpacing="3"
+                transform="rotate(90 1552 430)"
               >
-                ENTRANCE
+                POSTER / DIGITAL DISPLAY
               </text>
+            </g>
+
+            {/* Coffee / Relax icon near west lounge */}
+            <g id="landmark-relax-icon" transform="translate(85, 435)">
+              <rect width="32" height="32" rx="6" fill="#334155" />
+              <path d="M 10 11 L 22 11 L 20 20 L 12 20 Z" fill="#ffffff" />
+              <path d="M 20 13 H 23 A 2 2 0 0 1 23 17 H 19" fill="none" stroke="#ffffff" strokeWidth="1.5" />
             </g>
           </g>
 
@@ -1030,39 +980,17 @@ export default function InteractiveFloorMap({
               const isSelected = selectedExhibitor?.id === ex.id;
               const isHovered = hoveredExhibitor?.id === ex.id;
 
+              const badge = getStallBadge(ex);
+              const stripeH = Math.min(15, Math.max(5, ex.height * 0.16));
+              const availableHeight = ex.height - stripeH;
               const { lines, fontSize, lineHeight } = getWrappedLines(
                 ex.companyName,
                 ex.width,
-                ex.height
+                availableHeight
               );
               const totalTextHeight = lines.length * lineHeight;
-              const startY = ex.y + (ex.height - totalTextHeight) / 2 + fontSize * 0.85;
+              const startY = ex.y + stripeH + (availableHeight - totalTextHeight) / 2 + fontSize * 0.85;
               const centerX = ex.x + ex.width / 2;
-
-              let fillColor = '#ffffff';
-              let strokeColor = '#2563eb';
-              let textColor = '#0f172a';
-
-              if (ex.category.toLowerCase().includes('gold')) {
-                fillColor = '#fefce8';
-                strokeColor = '#eab308';
-                textColor = '#713f12';
-              } else if (ex.category.toLowerCase().includes('silver')) {
-                fillColor = '#f8fafc';
-                strokeColor = '#94a3b8';
-                textColor = '#1e293b';
-              }
-
-              if (isHovered) {
-                fillColor = '#e0f2fe';
-                strokeColor = '#0284c7';
-              }
-
-              if (isSelected) {
-                fillColor = '#fef08a';
-                strokeColor = '#b45309';
-                textColor = '#78350f';
-              }
 
               return (
                 <g
@@ -1076,33 +1004,63 @@ export default function InteractiveFloorMap({
                   tabIndex={0}
                   aria-label={ex.companyName}
                 >
+                  {/* Subtle outer glow / selection halo */}
                   {(isSelected || isHovered) && (
                     <rect
                       x={ex.x - 3}
                       y={ex.y - 3}
                       width={ex.width + 6}
                       height={ex.height + 6}
-                      rx="6"
-                      fill={isSelected ? '#eab308' : '#38bdf8'}
-                      opacity={isSelected ? 0.45 : 0.3}
+                      rx="8"
+                      fill={isSelected ? '#ea580c' : '#38bdf8'}
+                      opacity={isSelected ? 0.35 : 0.25}
                     />
                   )}
 
+                  {/* Main White Card Body */}
                   <rect
                     x={ex.x}
                     y={ex.y}
                     width={ex.width}
                     height={ex.height}
-                    rx="4"
-                    fill={fillColor}
-                    stroke={strokeColor}
-                    strokeWidth={isSelected ? 3 : isHovered ? 2 : 1.2}
+                    rx="6"
+                    fill="#ffffff"
+                    stroke={isSelected ? '#ea580c' : isHovered ? '#0284c7' : '#cbd5e1'}
+                    strokeWidth={isSelected ? 3.5 : isHovered ? 2 : 1.2}
+                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.06))"
                   />
 
+                  {/* Category Color Top Banner Stripe */}
+                  <rect
+                    x={ex.x + 1}
+                    y={ex.y + 1}
+                    width={Math.max(1, ex.width - 2)}
+                    height={stripeH}
+                    rx="5"
+                    fill={badge.stripeColor}
+                  />
+
+                  {/* Category / Stall Label inside top stripe */}
+                  {ex.height >= 30 && (
+                    <text
+                      x={centerX}
+                      y={ex.y + stripeH * 0.78}
+                      fill="#ffffff"
+                      fontSize={Math.max(7, Math.min(9.5, ex.width * 0.08))}
+                      fontWeight="800"
+                      textAnchor="middle"
+                      letterSpacing="0.6"
+                      pointerEvents="none"
+                    >
+                      {badge.tag}
+                    </text>
+                  )}
+
+                  {/* Company Name Centered */}
                   <text
                     x={centerX}
                     y={startY}
-                    fill={textColor}
+                    fill="#0f172a"
                     fontSize={fontSize}
                     fontWeight="700"
                     textAnchor="middle"
@@ -1124,72 +1082,32 @@ export default function InteractiveFloorMap({
           </g>
 
           {/* ========================================================
-              LIVE NAVIGATION ROUTE OVERLAY
+              AUTHENTIC INDOOR WALKING ROUTE (REFERENCE IMAGE 1)
              ======================================================== */}
           {route && routePathD && (
-            <g id="live-navigation-route" filter="url(#routeGlow)">
-              {/* Outer soft path corridor glow */}
+            <g id="live-navigation-route">
+              {/* Outer soft red path corridor glow */}
               <path
                 d={routePathD}
                 fill="none"
-                stroke="#38bdf8"
+                stroke="#fca5a5"
                 strokeWidth="12"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity="0.55"
+                opacity="0.45"
               />
 
-              {/* Traversed vs remaining polyline */}
+              {/* Bold Solid Red Walking Route Path */}
               <path
                 d={routePathD}
                 fill="none"
-                stroke="#0284c7"
-                strokeWidth="5"
+                stroke="#dc2626"
+                strokeWidth="6"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeDasharray="9 6"
-                className="animated-walking-path"
               />
 
-              {/* Directional chevrons along path */}
-              {routeArrows.map((arrow) => (
-                <g
-                  key={arrow.id}
-                  transform={`translate(${arrow.midX}, ${arrow.midY}) rotate(${arrow.angle})`}
-                  className="route-chevron-arrow"
-                >
-                  <polygon
-                    points="-7,-5 3,0 -7,5 -4,0"
-                    fill="#0369a1"
-                    stroke="#ffffff"
-                    strokeWidth="1"
-                  />
-                </g>
-              ))}
-
-              {/* Route checkpoints */}
-              {route.nodes.map((node, idx) => (
-                <circle
-                  key={`node-${node.id}-${idx}`}
-                  cx={node.x}
-                  cy={node.y}
-                  r={4}
-                  fill="#ffffff"
-                  stroke="#0369a1"
-                  strokeWidth={2}
-                />
-              ))}
-
-              {/* Start Point Marker (Google Maps Green Origin) */}
-              {route.nodes[0] && (
-                <g transform={`translate(${route.nodes[0].x}, ${route.nodes[0].y})`} pointerEvents="none">
-                  <circle r="12" fill="#22c55e" opacity="0.3" className="beacon-ring" />
-                  <circle r="6" fill="#16a34a" stroke="#ffffff" strokeWidth="2" />
-                  <circle r="2" fill="#ffffff" />
-                </g>
-              )}
-
-              {/* Destination Teardrop Pin (Google Maps Red Marker) */}
+              {/* Destination Teardrop Pin (Google Maps Red Marker at Target Stall) */}
               {route.nodes[route.nodes.length - 1] && (
                 <g
                   transform={`translate(${route.nodes[route.nodes.length - 1].x}, ${
@@ -1199,55 +1117,111 @@ export default function InteractiveFloorMap({
                 >
                   <circle r="14" fill="#ef4444" opacity="0.25" className="beacon-ring" />
                   <path
-                    d="M 0 0 C -6 -8, -10 -14, -10 -20 A 10 10 0 1 1 10 -20 C 10 -14, 6 -8, 0 0 Z"
+                    d="M 0 0 C -7 -10, -12 -16, -12 -24 A 12 12 0 1 1 12 -24 C 12 -16, 7 -10, 0 0 Z"
                     fill="#dc2626"
                     stroke="#ffffff"
-                    strokeWidth="1.5"
-                    filter="drop-shadow(0 2px 5px rgba(0,0,0,0.35))"
-                  />
-                  <circle cx="0" cy="-20" r="4" fill="#ffffff" />
-                </g>
-              )}
-
-              {/* ========================================================
-                  GOOGLE MAPS NAVIGATION USER POINTER PUCK
-                  (Continuous 60fps smooth movement & heading beam)
-                 ======================================================== */}
-              {currentUserPos && (
-                <g
-                  id="google-maps-user-pointer"
-                  transform={`translate(${currentUserPos.x}, ${currentUserPos.y})`}
-                  style={{ pointerEvents: 'none' }}
-                >
-                  {/* Flashlight Heading Beam Cone fanning forward */}
-                  <g transform={`rotate(${userBearing + 90})`}>
-                    <path
-                      d="M 0 0 L -36 -82 A 82 82 0 0 1 36 -82 Z"
-                      fill="url(#googleHeadingGlow)"
-                    />
-                  </g>
-
-                  {/* Pulsing radar accuracy ring */}
-                  <circle r="24" fill="#38bdf8" opacity="0.25" className="google-radar-pulse" />
-
-                  {/* White outer boundary ring with elevation shadow */}
-                  <circle
-                    r="13"
-                    fill="#ffffff"
-                    stroke="#1d4ed8"
-                    strokeWidth="1.5"
+                    strokeWidth="2"
                     filter="drop-shadow(0 3px 6px rgba(0,0,0,0.35))"
                   />
-
-                  {/* Vibrant Google Maps Blue Core */}
-                  <circle r="9" fill="#2563eb" />
-
-                  {/* Directional White Chevron inside puck */}
-                  <g transform={`rotate(${userBearing + 90})`}>
-                    <path d="M 0 -6 L 4.5 3 L 0 1.5 L -4.5 3 Z" fill="#ffffff" />
-                  </g>
+                  <circle cx="0" cy="-24" r="4.5" fill="#ffffff" />
                 </g>
               )}
+            </g>
+          )}
+
+          {/* ========================================================
+              "YOU ARE HERE" PUCK & SPEECH BUBBLE AT MAIN GATE (IMAGE 1)
+             ======================================================== */}
+          <g
+            id="you-are-here-marker"
+            transform={`translate(${route?.nodes[0]?.x ?? 1200}, ${route?.nodes[0]?.y ?? 830})`}
+            pointerEvents="none"
+          >
+            {/* Concentric animated pulse ring */}
+            <circle r="22" fill="#0284c7" opacity="0.22" className="beacon-ring" />
+
+            {/* Outer white ring */}
+            <circle
+              r="12"
+              fill="#ffffff"
+              stroke="#0284c7"
+              strokeWidth="2"
+              filter="drop-shadow(0 2px 5px rgba(0,0,0,0.25))"
+            />
+
+            {/* Vibrant Teal Puck Center */}
+            <circle r="8" fill="#0284c7" />
+
+            {/* Mobile phone indicator icon next to puck */}
+            <g transform="translate(16, -12)">
+              <rect width="12" height="20" rx="3" fill="#ffffff" stroke="#1e293b" strokeWidth="1.5" />
+              <rect x="2" y="3" width="8" height="12" rx="1" fill="#38bdf8" />
+              <circle cx="6" cy="17.5" r="0.8" fill="#1e293b" />
+            </g>
+
+            {/* Speech bubble "You are here" tooltip with downward arrow */}
+            <g transform="translate(0, -32)">
+              <rect
+                x="-48"
+                y="-20"
+                width="96"
+                height="22"
+                rx="4"
+                fill="#0f2942"
+                filter="drop-shadow(0 2px 4px rgba(0,0,0,0.25))"
+              />
+              <text
+                x="0"
+                y="-5"
+                fill="#ffffff"
+                fontSize="11"
+                fontWeight="800"
+                textAnchor="middle"
+                letterSpacing="0.4"
+              >
+                You are here
+              </text>
+              {/* Downward pointer triangle */}
+              <polygon points="-5,2 5,2 0,7" fill="#0f2942" />
+            </g>
+          </g>
+
+          {/* ========================================================
+              LIVE NAVIGATION USER POINTER PUCK (WHEN WALKING)
+             ======================================================== */}
+          {isNavigatingLive && currentUserPos && (
+            <g
+              id="google-maps-user-pointer"
+              transform={`translate(${currentUserPos.x}, ${currentUserPos.y})`}
+              style={{ pointerEvents: 'none' }}
+            >
+              {/* Flashlight Heading Beam Cone */}
+              <g transform={`rotate(${userBearing + 90})`}>
+                <path
+                  d="M 0 0 L -36 -82 A 82 82 0 0 1 36 -82 Z"
+                  fill="url(#googleHeadingGlow)"
+                />
+              </g>
+
+              {/* Pulsing radar ring */}
+              <circle r="24" fill="#38bdf8" opacity="0.25" className="google-radar-pulse" />
+
+              {/* White outer boundary ring */}
+              <circle
+                r="13"
+                fill="#ffffff"
+                stroke="#1d4ed8"
+                strokeWidth="1.5"
+                filter="drop-shadow(0 3px 6px rgba(0,0,0,0.35))"
+              />
+
+              {/* Blue Core */}
+              <circle r="9" fill="#2563eb" />
+
+              {/* Directional White Chevron */}
+              <g transform={`rotate(${userBearing + 90})`}>
+                <path d="M 0 -6 L 4.5 3 L 0 1.5 L -4.5 3 Z" fill="#ffffff" />
+              </g>
             </g>
           )}
         </svg>

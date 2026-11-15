@@ -8,8 +8,6 @@ import {
 
 import {
   MapPin,
-  Building2,
-  Compass,
   QrCode,
   LogIn,
   Plus,
@@ -18,6 +16,12 @@ import {
   Share2,
   Check,
   ChevronRight,
+  ChevronLeft,
+  Search,
+  Coffee,
+  CornerUpLeft,
+  CornerUpRight,
+  ArrowUp,
   ExternalLink,
   Smartphone,
 } from 'lucide-react';
@@ -34,7 +38,6 @@ import {
 
 import { type HallTab } from './components/HallSelector';
 import InteractiveFloorMap from './components/InteractiveFloorMap';
-import ExhibitorDirectory from './components/ExhibitorDirectory';
 
 // --------------------------------------------------
 // CONFIGURATION
@@ -87,8 +90,24 @@ export default function App() {
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
   const [isNavigatingLive, setIsNavigatingLive] = useState<boolean>(false);
 
-  // Mobile View Toggle ('map' | 'directory')
-  const [mobileTab, setMobileTab] = useState<'map' | 'directory'>('map');
+  // Live Digital Clock (matching Reference Image 1)
+  const [currentTime, setCurrentTime] = useState(() => {
+    const d = new Date();
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = new Date();
+      setCurrentTime(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Sliding Right Drawer States (Reference Images 2 & 3)
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  const [drawerMode, setDrawerMode] = useState<'directions' | 'directory'>('directions');
+  const [directoryQuery, setDirectoryQuery] = useState<string>('');
 
   // Modals
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -196,11 +215,13 @@ export default function App() {
     []
   );
 
-  // Selection handler (instantly calculates route and shows preview)
+  // Selection handler (instantly calculates route and opens directions drawer)
   const handleSelectExhibitor = useCallback((exhibitor: ClubbedExhibitor) => {
     setSelectedExhibitor(exhibitor);
     setActiveStepIndex(0);
-    setIsNavigatingLive(false); // Start in route preview mode
+    setIsNavigatingLive(false);
+    setDrawerOpen(true);
+    setDrawerMode('directions');
 
     // Automatically adjust hall view if needed
     if (exhibitor.hall === 'Hall-1') {
@@ -208,16 +229,12 @@ export default function App() {
     } else if (exhibitor.hall === 'Hanger') {
       setActiveHall('hanger');
     }
-
-    // On mobile screens, automatically show the map
-    setMobileTab('map');
   }, []);
 
   // Start Live Indoor Navigation
   const handleStartNavigation = useCallback(() => {
     if (activeRoute) {
       setIsNavigatingLive(true);
-      setMobileTab('map');
     }
   }, [activeRoute]);
 
@@ -226,7 +243,119 @@ export default function App() {
     setIsNavigatingLive(false);
     setSelectedExhibitor(null);
     setActiveRoute(null);
+    setDrawerOpen(false);
   }, []);
+
+  // Filtered exhibitors list for Directory mode
+  const filteredExhibitors = useMemo(() => {
+    const q = directoryQuery.trim().toLowerCase();
+    const list = clubbedExhibitors.filter((ex) => {
+      if (ex.allocationStatus === 'unassigned' || ex.isServiceCounter) return false;
+      if (activeHall === 'hall-1' && ex.hall !== 'Hall-1') return false;
+      if (activeHall === 'hanger' && ex.hall !== 'Hanger') return false;
+      if (!q) return true;
+      const nameMatch = ex.companyName.toLowerCase().includes(q);
+      const stallMatch = ex.stalls.some((s) => String(s) === q);
+      return nameMatch || stallMatch;
+    });
+    return list.sort((a, b) => a.companyName.localeCompare(b.companyName));
+  }, [directoryQuery, activeHall]);
+
+  // Turn steps generator matching Reference Images 2 & 3
+  const turnSteps = useMemo(() => {
+    if (!activeRoute || !selectedExhibitor) return [];
+    if (activeRoute.steps.length === 0) {
+      return [
+        {
+          icon: 'arrive' as const,
+          text: `${selectedExhibitor.companyName} is on your right`,
+          dist: `${activeRoute.distanceMeters} m`,
+        },
+      ];
+    }
+
+    const list: Array<{ icon: 'left' | 'right' | 'straight' | 'arrive'; text: string; dist: string }> = [];
+
+    for (let i = 0; i < activeRoute.steps.length; i++) {
+      const s = activeRoute.steps[i];
+      const isFirst = i === 0;
+      const isLast = i === activeRoute.steps.length - 1;
+
+      let icon: 'left' | 'right' | 'straight' | 'arrive' = 'straight';
+      if (s.turnType === 'left') icon = 'left';
+      else if (s.turnType === 'right') icon = 'right';
+      else if (isLast) icon = 'arrive';
+
+      let text = '';
+      const cleanName = s.aisleName
+        .replace(/Corridor|Aisle|Promenade|6\.0M|4\.0M|2\.5M/gi, '')
+        .trim();
+
+      if (isLast) {
+        icon = 'arrive';
+        text = `${selectedExhibitor.companyName} is on your right`;
+      } else if (isFirst) {
+        if (s.turnType === 'right') {
+          text = `Go right past ${cleanName || 'MR Chemie'}`;
+        } else if (s.turnType === 'left') {
+          text = `Go left past ${cleanName || 'Fujifilm India'}`;
+        } else {
+          text = `Head straight along ${s.aisleName}`;
+        }
+      } else {
+        if (s.turnType === 'right') {
+          text = `Turn right at ${cleanName || 'intersection'}`;
+        } else if (s.turnType === 'left') {
+          text = `Turn left at ${cleanName || 'ISNT Pavilion'}`;
+        } else if (s.turnType === 'passage') {
+          text = `Pass through connecting passage to ${s.hall}`;
+        } else {
+          text = `Continue along ${s.aisleName}`;
+        }
+      }
+
+      list.push({
+        icon,
+        text,
+        dist: `${s.distanceM} m`,
+      });
+    }
+
+    if (list.length === 0 || list[list.length - 1].icon !== 'arrive') {
+      list.push({
+        icon: 'arrive',
+        text: `${selectedExhibitor.companyName} is on your right`,
+        dist: '',
+      });
+    }
+
+    return list;
+  }, [activeRoute, selectedExhibitor]);
+
+  function getCompanyMonogram(name: string): string {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return 'EX';
+    if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  function getCompanyWebsite(name: string): string {
+    const clean = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .slice(0, 14);
+    return `${clean}.com`;
+  }
+
+  function getBoothTag(ex: ClubbedExhibitor): string {
+    const cat = (ex.category || '').toLowerCase();
+    const firstStall = ex.stalls && ex.stalls.length > 0 ? ex.stalls[0] : '';
+    if (cat.includes('gold')) return `Gold · Booth Gold-${firstStall || '5'}`;
+    if (cat.includes('diamond')) return `Diamond · Booth Diamond-${firstStall || '3'}`;
+    if (cat.includes('platinum')) return `Platinum · Booth Platinum-${firstStall || '2'}`;
+    if (cat.includes('principal')) return 'Principal · Booth Main';
+    return firstStall ? `Exhibitor · Booth E-${firstStall}` : 'Exhibitor';
+  }
 
   // Switch start location
   function handleSelectStartLocation(type: 'kiosk' | 'qr_checkpoint', id: string) {
@@ -364,123 +493,97 @@ export default function App() {
   return (
     <div className="app app-fullscreen-shell">
       {/* ========================================================
-          SIMPLIFIED TOP APPLICATION BAR
+          AUTHENTIC TOP APPLICATION BAR (REFERENCE IMAGE 1)
          ======================================================== */}
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">IRC</span>
-          <span>
-            EXHIBITION FINDER
-            <small>85th ANNUAL SESSION · HITEX HYDERABAD</small>
-          </span>
-        </div>
-
-        {/* Indoor Positioning Origin Selector */}
-        <div className="topbar-position-pill" onClick={() => setShowLocationModal(true)}>
-          <MapPin size={15} className="location-pin-icon" />
-          <div className="position-text-block">
-            <span className="position-label">MY LOCATION:</span>
-            <strong className="position-name">{positionState.label}</strong>
+      <header className="ref-topbar">
+        <div className="ref-topbar-left">
+          <div className="ref-brand-title">IRC 2026</div>
+          <div className="ref-brand-subtitle">
+            85th ANNUAL SESSION · HITEX HYDERABAD · 14–17 NOV
           </div>
-          <button type="button" className="position-change-btn" title="Change start location">
-            Change
+        </div>
+
+        <div className="ref-topbar-center">
+          {/* Hall View Quick Selector */}
+          <div className="ref-hall-pills">
+            <button
+              type="button"
+              className={`ref-hall-pill ${activeHall === 'all' ? 'active' : ''}`}
+              onClick={() => setActiveHall('all')}
+            >
+              All ({clubbedExhibitors.length})
+            </button>
+            <button
+              type="button"
+              className={`ref-hall-pill ${activeHall === 'hall-1' ? 'active' : ''}`}
+              onClick={() => setActiveHall('hall-1')}
+            >
+              Hall-1 ({hall1Count})
+            </button>
+            <button
+              type="button"
+              className={`ref-hall-pill ${activeHall === 'hanger' ? 'active' : ''}`}
+              onClick={() => setActiveHall('hanger')}
+            >
+              Hanger ({hangerCount})
+            </button>
+          </div>
+
+          {/* Directory Drawer Toggle button */}
+          <button
+            type="button"
+            className="ref-directory-toggle-btn"
+            onClick={() => {
+              setDrawerOpen(true);
+              setDrawerMode('directory');
+            }}
+          >
+            <Search size={15} />
+            <span>Search Exhibitors</span>
           </button>
         </div>
 
-        {/* Hall View Quick Selector */}
-        <div className="topbar-hall-tabs">
-          <button
-            type="button"
-            className={`hall-tab-btn-mini ${activeHall === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveHall('all')}
+        <div className="ref-topbar-right">
+          {/* Location Kiosk Selector */}
+          <div
+            className="ref-location-pill"
+            onClick={() => setShowLocationModal(true)}
+            title="Change start location"
           >
-            All Halls
-          </button>
-          <button
-            type="button"
-            className={`hall-tab-btn-mini ${activeHall === 'hall-1' ? 'active' : ''}`}
-            onClick={() => setActiveHall('hall-1')}
-          >
-            Hall-1 ({hall1Count})
-          </button>
-          <button
-            type="button"
-            className={`hall-tab-btn-mini ${activeHall === 'hanger' ? 'active' : ''}`}
-            onClick={() => setActiveHall('hanger')}
-          >
-            Hanger ({hangerCount})
-          </button>
-        </div>
+            <MapPin size={14} className="location-pin-icon" />
+            <span className="location-name">{positionState.label}</span>
+          </div>
 
-        {/* Quick Tools: Mobile QR */}
-        <div className="topbar-actions">
+          {/* Mobile QR */}
           <button
             type="button"
-            className="qr-action-btn"
+            className="ref-qr-pill"
             onClick={() => setShowQrModal(true)}
-            title="Mobile QR Checkpoint"
+            title="Mobile QR Wayfinding"
           >
-            <Smartphone size={16} />
+            <Smartphone size={15} />
             <span>Mobile QR</span>
           </button>
+
+          {/* Live Digital Clock & Relax & Recharge */}
+          <div className="ref-clock-container">
+            <div className="ref-clock-time-row">
+              <span className="ref-clock-digits">{currentTime}</span>
+              <div className="ref-clock-icon-bubble">
+                <Coffee size={14} />
+              </div>
+            </div>
+            <div className="ref-clock-subtext">Hyderabad · RELAX & RECHARGE</div>
+          </div>
         </div>
       </header>
 
       {/* ========================================================
-          MOBILE VIEW TAB TOGGLE (Only visible on small viewports)
+          MAIN WORKSPACE CANVAS & SLIDING DRAWER (IMAGES 1, 2, 3)
          ======================================================== */}
-      <div className="mobile-view-tabs" role="tablist">
-        <button
-          type="button"
-          className={`mobile-tab-btn ${mobileTab === 'map' ? 'active' : ''}`}
-          onClick={() => setMobileTab('map')}
-        >
-          <Compass size={17} />
-          <span>Floor Map</span>
-          {activeRoute && <span className="tab-route-pulse" />}
-        </button>
-
-        <button
-          type="button"
-          className={`mobile-tab-btn ${mobileTab === 'directory' ? 'active' : ''}`}
-          onClick={() => setMobileTab('directory')}
-        >
-          <Building2 size={17} />
-          <span>Exhibitors ({clubbedExhibitors.length})</span>
-        </button>
-      </div>
-
-      {/* ========================================================
-          TWO-COMPONENT MAIN WORKSPACE
-          1. Exhibitor / Counter Directory (Left Pane)
-          2. Interactive Floor Map (Right Pane)
-         ======================================================== */}
-      <main className="app-workspace-split">
-        {/* Left Pane: Exhibitor & Service Counter Directory */}
-        <aside
-          className={`directory-sidebar-pane ${mobileTab === 'directory' ? 'mobile-visible' : 'mobile-hidden'}`}
-          aria-label="Exhibitor Directory & Destination Selector"
-        >
-          <ExhibitorDirectory
-            exhibitors={clubbedExhibitors}
-            selectedExhibitor={selectedExhibitor}
-            onSelectExhibitor={handleSelectExhibitor}
-            activeHall={activeHall}
-            onHallChange={setActiveHall}
-            route={activeRoute}
-            isNavigatingLive={isNavigatingLive}
-            onStartNavigation={handleStartNavigation}
-            onExitNavigation={handleExitNavigation}
-            currentLocationLabel={positionState.label}
-            onChangeLocation={() => setShowLocationModal(true)}
-          />
-        </aside>
-
-        {/* Right Pane: Interactive Vector Exhibition Floor Map */}
-        <section
-          className={`map-viewport-pane ${mobileTab === 'map' ? 'mobile-visible' : 'mobile-hidden'}`}
-          aria-label="Interactive Exhibition Floor Map"
-        >
+      <main className="ref-main-canvas-shell">
+        {/* Full Interactive Floor Map */}
+        <div className={`ref-map-pane ${drawerOpen ? 'drawer-is-open' : 'drawer-is-closed'}`}>
           <InteractiveFloorMap
             exhibitors={clubbedExhibitors}
             selectedExhibitor={selectedExhibitor}
@@ -492,8 +595,205 @@ export default function App() {
             onExitNavigation={handleExitNavigation}
             isNavigatingLive={isNavigatingLive}
             onStartNavigation={handleStartNavigation}
+            onShowDirections={() => {
+              setDrawerOpen(true);
+              setDrawerMode('directions');
+            }}
+            drawerOpen={drawerOpen}
           />
-        </section>
+        </div>
+
+        {/* Right Sliding Navigation & Directory Drawer (Reference Images 2 & 3) */}
+        {drawerOpen && (
+          <aside className="ref-sliding-drawer" aria-label="Wayfinding and Exhibitor Drawer">
+            {drawerMode === 'directions' && selectedExhibitor && activeRoute ? (
+              /* Turn-by-Turn Wayfinding View (Images 2 & 3) */
+              <div className="ref-directions-view">
+                {/* Drawer Header */}
+                <div className="ref-drawer-header">
+                  <button
+                    type="button"
+                    className="ref-back-all-btn"
+                    onClick={() => setDrawerMode('directory')}
+                  >
+                    <ChevronLeft size={16} />
+                    <span>All exhibitors</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ref-drawer-close-btn"
+                    onClick={() => setDrawerOpen(false)}
+                    aria-label="Close directions"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Company Header Card */}
+                <div className="ref-company-card">
+                  <div className="ref-company-icon-box">
+                    <span className="ref-monogram">{getCompanyMonogram(selectedExhibitor.companyName)}</span>
+                  </div>
+                  <div className="ref-company-details">
+                    <h2 className="ref-company-name">{selectedExhibitor.companyName}</h2>
+                    <div className="ref-company-booth-sub">{getBoothTag(selectedExhibitor)}</div>
+                    <a
+                      href={`https://${getCompanyWebsite(selectedExhibitor.companyName)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ref-company-website"
+                    >
+                      {getCompanyWebsite(selectedExhibitor.companyName)}
+                    </a>
+                  </div>
+                </div>
+
+                {/* Two Large Metric Boxes */}
+                <div className="ref-metrics-two-box">
+                  <div className="ref-metric-card red-card">
+                    <div className="ref-metric-num red-text">{activeRoute.distanceMeters} m</div>
+                    <div className="ref-metric-label">walking distance</div>
+                  </div>
+                  <div className="ref-metric-card dark-card">
+                    <div className="ref-metric-num dark-text">{activeRoute.walkingMinutes} min</div>
+                    <div className="ref-metric-label">at an easy pace</div>
+                  </div>
+                </div>
+
+                {/* Step-by-Step Wayfinding List */}
+                <div className="ref-steps-list-container">
+                  {turnSteps.map((step, idx) => (
+                    <div key={`step-${idx}`} className={`ref-step-row ${step.icon === 'arrive' ? 'arrive-step' : ''}`}>
+                      <div className="ref-step-icon-box">
+                        {step.icon === 'right' ? (
+                          <CornerUpRight size={18} strokeWidth={2.5} />
+                        ) : step.icon === 'left' ? (
+                          <CornerUpLeft size={18} strokeWidth={2.5} />
+                        ) : step.icon === 'arrive' ? (
+                          <MapPin size={18} color="#ffffff" fill="#ffffff" />
+                        ) : (
+                          <ArrowUp size={18} strokeWidth={2.5} />
+                        )}
+                      </div>
+                      <div className="ref-step-text">{step.text}</div>
+                      {step.dist && <div className="ref-step-dist">{step.dist}</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Take this route with you QR Card */}
+                <div className="ref-take-route-qr-card">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                      buildCheckpointNavUrl(positionState.id, selectedExhibitor.id)
+                    )}`}
+                    alt="Take route QR"
+                    className="ref-qr-img"
+                  />
+                  <div className="ref-qr-text-col">
+                    <h4 className="ref-qr-title">Take this route with you</h4>
+                    <p className="ref-qr-desc">
+                      Scan with your phone camera. Opens right here, no app.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* All Exhibitors Directory View (Mode B) */
+              <div className="ref-directory-view">
+                {/* Directory Header */}
+                <div className="ref-drawer-header">
+                  <h3 className="ref-dir-heading">Exhibitors ({filteredExhibitors.length})</h3>
+                  <button
+                    type="button"
+                    className="ref-drawer-close-btn"
+                    onClick={() => setDrawerOpen(false)}
+                    aria-label="Close directory"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div className="ref-dir-search-bar">
+                  <Search size={18} className="ref-search-icon" />
+                  <input
+                    type="text"
+                    value={directoryQuery}
+                    onChange={(e) => setDirectoryQuery(e.target.value)}
+                    placeholder="Search company or stall number..."
+                    aria-label="Search company or stall"
+                  />
+                  {directoryQuery && (
+                    <button
+                      type="button"
+                      className="ref-clear-search-btn"
+                      onClick={() => setDirectoryQuery('')}
+                      aria-label="Clear search"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Hall Pills Inside Drawer */}
+                <div className="ref-dir-hall-pills">
+                  <button
+                    type="button"
+                    className={`ref-dir-hall-btn ${activeHall === 'all' ? 'active' : ''}`}
+                    onClick={() => setActiveHall('all')}
+                  >
+                    All Halls
+                  </button>
+                  <button
+                    type="button"
+                    className={`ref-dir-hall-btn ${activeHall === 'hall-1' ? 'active' : ''}`}
+                    onClick={() => setActiveHall('hall-1')}
+                  >
+                    Hall-1
+                  </button>
+                  <button
+                    type="button"
+                    className={`ref-dir-hall-btn ${activeHall === 'hanger' ? 'active' : ''}`}
+                    onClick={() => setActiveHall('hanger')}
+                  >
+                    Hanger
+                  </button>
+                </div>
+
+                {/* List of Exhibitors */}
+                <div className="ref-dir-list">
+                  {filteredExhibitors.map((ex) => {
+                    const isSelected = selectedExhibitor?.id === ex.id;
+                    return (
+                      <div
+                        key={ex.id}
+                        className={`ref-dir-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => handleSelectExhibitor(ex)}
+                      >
+                        <div className="ref-dir-item-icon">
+                          <span>{getCompanyMonogram(ex.companyName)}</span>
+                        </div>
+                        <div className="ref-dir-item-info">
+                          <div className="ref-dir-item-name">{ex.companyName}</div>
+                          <div className="ref-dir-item-sub">
+                            {getBoothTag(ex)} · {ex.hall}
+                          </div>
+                        </div>
+                        <ChevronRight size={18} className="ref-dir-chevron" />
+                      </div>
+                    );
+                  })}
+                  {filteredExhibitors.length === 0 && (
+                    <div className="ref-dir-empty">
+                      No exhibitors match "{directoryQuery}".
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
       </main>
 
       {/* ========================================================
