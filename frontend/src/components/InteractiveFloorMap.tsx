@@ -58,6 +58,29 @@ const VIEW_PRESETS: Record<HallTab, ViewBox> = {
   hanger: { x: 50, y: 50, width: 730, height: 800 },
 };
 
+function isValidViewBox(vb?: ViewBox | null): vb is ViewBox {
+  if (!vb) return false;
+  return (
+    Number.isFinite(vb.x) &&
+    Number.isFinite(vb.y) &&
+    Number.isFinite(vb.width) &&
+    Number.isFinite(vb.height) &&
+    vb.width > 50 &&
+    vb.height > 50
+  );
+}
+
+function clampViewBox(vb: ViewBox, defaultPreset: ViewBox): ViewBox {
+  if (!isValidViewBox(vb)) return { ...defaultPreset };
+  const minW = 200;
+  const maxW = 2600;
+  const width = Math.max(minW, Math.min(maxW, vb.width));
+  const height = width * (defaultPreset.height / defaultPreset.width);
+  const x = Math.max(-500, Math.min(1900, vb.x));
+  const y = Math.max(-350, Math.min(1300, vb.y));
+  return { x, y, width, height };
+}
+
 type RouteSegment = {
   fromNode: NavNode;
   toNode: NavNode;
@@ -119,13 +142,25 @@ function playArrivalChime() {
   }
 }
 
-// Word-wrapping and text scaling helper for exhibitor stalls
+// Clean corporate boilerplate suffixes for crisp, non-clustered stall labels when zoomed out
+function cleanSimplifiedName(name: string): string {
+  const stripped = name
+    .replace(/\s*\((?:INDIA|A UNIT OF.*?|3M|P|LIMITED|PVT|LTD)\)/gi, '')
+    .replace(/\b(?:PRIVATE LIMITED|PVT\.?\s*LTD\.?|LIMITED|LTD\.?|LLP|ENTERPRISES|TECHNOLOGIES|CONSULTING|ENGINEERS|INDUSTRIES)\b/gi, '')
+    .trim()
+    .replace(/\s{2,}/g, ' ');
+  return stripped || name.trim();
+}
+
+// Word-wrapping and text scaling helper for exhibitor stalls with Level-of-Detail
 function getWrappedLines(
   companyName: string,
   width: number,
-  height: number
+  height: number,
+  isSimplified = false
 ): { lines: string[]; fontSize: number; lineHeight: number } {
-  const words = companyName.trim().split(/\s+/);
+  const targetName = isSimplified ? cleanSimplifiedName(companyName) : companyName.trim();
+  const words = targetName.split(/\s+/).filter(Boolean);
 
   let fontSize = 9;
   if (width < 50 || height < 36) fontSize = 7;
@@ -134,9 +169,9 @@ function getWrappedLines(
   else if (width >= 140 && height >= 80) fontSize = 11.5;
 
   const lineHeight = fontSize * 1.25;
-  const paddingX = 6;
-  const maxCharsPerLine = Math.max(5, Math.floor((width - paddingX * 2) / (fontSize * 0.56)));
-  const maxLines = Math.max(1, Math.floor((height - 8) / lineHeight));
+  const paddingX = 4;
+  const maxCharsPerLine = Math.max(4, Math.floor((width - paddingX * 2) / (fontSize * 0.54)));
+  const maxLines = Math.max(1, Math.floor((height - 4) / lineHeight));
 
   const lines: string[] = [];
   let currentLine = '';
@@ -162,7 +197,7 @@ function getWrappedLines(
   if (packedWords < totalWords && lines.length > 0) {
     const last = lines[lines.length - 1];
     if (last.length > maxCharsPerLine - 2) {
-      lines[lines.length - 1] = last.substring(0, maxCharsPerLine - 3) + '…';
+      lines[lines.length - 1] = last.substring(0, Math.max(2, maxCharsPerLine - 3)) + '…';
     } else {
       lines[lines.length - 1] = last + '…';
     }
@@ -223,16 +258,29 @@ export default function InteractiveFloorMap({
   const [hoveredPathway, setHoveredPathway] = useState<FloorPathway | null>(null);
   const showAisleLabels = false;
 
+  // Zoom scale and Level-of-Detail (LOD) detection
+  const zoomScale = useMemo(() => {
+    return isValidViewBox(view) ? 1600 / view.width : 1;
+  }, [view]);
+  const isZoomedOut = zoomScale < 1.35;
+
   // Live Navigation States
   const [isCameraFollowEnabled, setIsCameraFollowEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Multi-touch gestures & drag detection refs
   const dragRef = useRef<{
     x: number;
     y: number;
     viewX: number;
     viewY: number;
   } | null>(null);
+
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartViewRef = useRef<ViewBox | null>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const pointerDownOriginRef = useRef<{ x: number; y: number } | null>(null);
 
   const lastChimedStepRef = useRef<number>(-1);
 
@@ -342,47 +390,36 @@ export default function InteractiveFloorMap({
     }
   }, [currentStepIndex, isNavigatingLive, soundEnabled]);
 
-  // Mobile Camera Auto-Follow (Center smoothly around user's walking dot)
+  // Mobile Camera Auto-Follow (Center smoothly around user's walking dot during live navigation)
   useEffect(() => {
     if (!isNavigatingLive || !isMobile || !isCameraFollowEnabled || !currentUserPos) return;
 
     setView((curr) => {
+      const safeCurr = isValidViewBox(curr) ? curr : VIEW_PRESETS[activeHall];
       const targetW = 680;
       const targetH = 480;
       const targetX = currentUserPos.x - targetW / 2;
       const targetY = currentUserPos.y - targetH / 2;
 
-      return {
-        x: curr.x + (targetX - curr.x) * 0.25,
-        y: curr.y + (targetY - curr.y) * 0.25,
-        width: targetW,
-        height: targetH,
-      };
+      return clampViewBox(
+        {
+          x: safeCurr.x + (targetX - safeCurr.x) * 0.25,
+          y: safeCurr.y + (targetY - safeCurr.y) * 0.25,
+          width: targetW,
+          height: targetH,
+        },
+        VIEW_PRESETS[activeHall]
+      );
     });
-  }, [currentUserPos, isNavigatingLive, isMobile, isCameraFollowEnabled]);
+  }, [currentUserPos, isNavigatingLive, isMobile, isCameraFollowEnabled, activeHall]);
 
-  // Kiosk Static Framing (Map layout stays static, stable and framed per hall)
+  // Sync view when activeHall changes explicitly (Preserve viewport on stall selection)
   useEffect(() => {
-    if (route && route.nodes.length > 0 && !isNavigatingLive) {
-      const hasHall1 = route.nodes.some((n) => n.x >= 750);
-      const hasHanger = route.nodes.some((n) => n.x <= 850);
-      if (hasHall1 && hasHanger) {
-        setView(VIEW_PRESETS['all']);
-      } else if (hasHall1) {
-        setView(VIEW_PRESETS['hall-1']);
-      } else {
-        setView(VIEW_PRESETS['hanger']);
-      }
-    }
-  }, [route, isNavigatingLive]);
-
-  // Sync view when activeHall changes
-  useEffect(() => {
-    if (!route && !isNavigatingLive) {
+    if (!isNavigatingLive) {
       setView(VIEW_PRESETS[activeHall]);
       setZoom(1);
     }
-  }, [activeHall, route, isNavigatingLive]);
+  }, [activeHall, isNavigatingLive]);
 
   // Inform parent step tracker
   useEffect(() => {
@@ -391,34 +428,31 @@ export default function InteractiveFloorMap({
     }
   }, [currentStepIndex, activeStepIndex, onSelectStep]);
 
-  // Static Map Layout: Camera auto-follow is disabled to keep the kiosk map static and stable
-  useEffect(() => {
-    // Map layout remains static to prevent jitter, distortion, or view jumps on touchscreens
-  }, [currentUserPos, isCameraFollowEnabled, route]);
-
   function changeZoom(factor: number) {
     setIsCameraFollowEnabled(false);
     setView((curr) => {
-      const newW = curr.width * factor;
-      const newH = curr.height * factor;
-      if (newW < 250 || newW > 2500) return curr;
+      const safeCurr = isValidViewBox(curr) ? curr : VIEW_PRESETS[activeHall];
+      const newW = safeCurr.width * factor;
+      const newH = safeCurr.height * factor;
+      if (newW < 200 || newW > 2600) return safeCurr;
 
       setZoom(1600 / newW);
-      return {
-        x: curr.x + (curr.width - newW) / 2,
-        y: curr.y + (curr.height - newH) / 2,
-        width: newW,
-        height: newH,
-      };
+      return clampViewBox(
+        {
+          x: safeCurr.x + (safeCurr.width - newW) / 2,
+          y: safeCurr.y + (safeCurr.height - newH) / 2,
+          width: newW,
+          height: newH,
+        },
+        VIEW_PRESETS[activeHall]
+      );
     });
   }
 
   function resetView() {
     setIsCameraFollowEnabled(true);
-    if (!route) {
-      setView(VIEW_PRESETS[activeHall]);
-      setZoom(1);
-    }
+    setView(VIEW_PRESETS[activeHall]);
+    setZoom(1);
   }
 
   function handleWheel(e: WheelEvent<SVGSVGElement>) {
@@ -429,35 +463,126 @@ export default function InteractiveFloorMap({
   }
 
   function handlePointerDown(e: PointerEvent<SVGSVGElement>) {
-    if (e.button !== 0) return;
-    // When the user drags manually, pause camera follow like Google Maps
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     setIsCameraFollowEnabled(false);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      viewX: view.x,
-      viewY: view.y,
-    };
-    setDragging(true);
+
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size === 1) {
+      pointerDownOriginRef.current = { x: e.clientX, y: e.clientY };
+      isDraggingRef.current = false;
+      dragRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        viewX: isValidViewBox(view) ? view.x : VIEW_PRESETS[activeHall].x,
+        viewY: isValidViewBox(view) ? view.y : VIEW_PRESETS[activeHall].y,
+      };
+    } else if (activePointersRef.current.size === 2) {
+      // Begin 2-finger pinch gesture
+      const pts = Array.from(activePointersRef.current.values());
+      pinchStartDistRef.current = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStartViewRef.current = isValidViewBox(view) ? { ...view } : { ...VIEW_PRESETS[activeHall] };
+      isDraggingRef.current = true;
+    }
   }
 
   function handlePointerMove(e: PointerEvent<SVGSVGElement>) {
-    if (!dragRef.current || !svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - dragRef.current.x) / rect.width) * view.width;
-    const dy = ((e.clientY - dragRef.current.y) / rect.height) * view.height;
+    if (!activePointersRef.current.has(e.pointerId)) return;
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    setView((curr) => ({
-      ...curr,
-      x: dragRef.current!.viewX - dx,
-      y: dragRef.current!.viewY - dy,
-    }));
+    const numPointers = activePointersRef.current.size;
+
+    if (numPointers === 1 && dragRef.current && svgRef.current) {
+      const origin = pointerDownOriginRef.current;
+      const moveDist = origin ? Math.hypot(e.clientX - origin.x, e.clientY - origin.y) : 0;
+
+      // Only engage map panning if moved beyond 6px (prevents tap jitter from canceling stall selection)
+      if (moveDist > 6) {
+        if (!isDraggingRef.current) {
+          isDraggingRef.current = true;
+          setDragging(true);
+        }
+        const rect = svgRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const dx = ((e.clientX - dragRef.current.x) / rect.width) * view.width;
+          const dy = ((e.clientY - dragRef.current.y) / rect.height) * view.height;
+
+          setView((curr) =>
+            clampViewBox(
+              {
+                ...curr,
+                x: dragRef.current!.viewX - dx,
+                y: dragRef.current!.viewY - dy,
+              },
+              VIEW_PRESETS[activeHall]
+            )
+          );
+        }
+      }
+    } else if (
+      numPointers === 2 &&
+      pinchStartDistRef.current &&
+      pinchStartViewRef.current &&
+      svgRef.current
+    ) {
+      // Two-finger pinch-to-zoom
+      const pts = Array.from(activePointersRef.current.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (pinchStartDistRef.current > 15 && currentDist > 15) {
+        isDraggingRef.current = true;
+        setDragging(true);
+        const scale = pinchStartDistRef.current / currentDist;
+        const initialView = pinchStartViewRef.current;
+        const rect = svgRef.current.getBoundingClientRect();
+
+        if (rect.width > 0 && rect.height > 0) {
+          const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
+          const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
+
+          const focalSvgX = initialView.x + (midX / rect.width) * initialView.width;
+          const focalSvgY = initialView.y + (midY / rect.height) * initialView.height;
+
+          const newW = initialView.width * scale;
+          const newH = initialView.height * scale;
+
+          const newX = focalSvgX - (midX / rect.width) * newW;
+          const newY = focalSvgY - (midY / rect.height) * newH;
+
+          setView(
+            clampViewBox(
+              { x: newX, y: newY, width: newW, height: newH },
+              VIEW_PRESETS[activeHall]
+            )
+          );
+        }
+      }
+    }
   }
 
-  function handlePointerUp() {
-    dragRef.current = null;
-    setDragging(false);
+  function handlePointerUp(e: PointerEvent<SVGSVGElement>) {
+    activePointersRef.current.delete(e.pointerId);
+
+    if (activePointersRef.current.size === 0) {
+      dragRef.current = null;
+      pinchStartDistRef.current = null;
+      pinchStartViewRef.current = null;
+      pointerDownOriginRef.current = null;
+      setDragging(false);
+      setTimeout(() => {
+        isDraggingRef.current = false;
+      }, 60);
+    } else if (activePointersRef.current.size === 1) {
+      const remaining = Array.from(activePointersRef.current.values())[0];
+      dragRef.current = {
+        x: remaining.x,
+        y: remaining.y,
+        viewX: isValidViewBox(view) ? view.x : VIEW_PRESETS[activeHall].x,
+        viewY: isValidViewBox(view) ? view.y : VIEW_PRESETS[activeHall].y,
+      };
+      pinchStartDistRef.current = null;
+      pinchStartViewRef.current = null;
+      pointerDownOriginRef.current = { x: remaining.x, y: remaining.y };
+    }
   }
 
   // Filter exhibitors: display officially allotted exhibitor stalls only
@@ -648,11 +773,16 @@ export default function InteractiveFloorMap({
           </div>
         )}
 
-        {/* SVG Map Canvas */}
+        {/* SVG Map Canvas with Multi-Touch Pinch-to-Zoom & Pan */}
         <svg
           ref={svgRef}
-          viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
+          viewBox={`${isValidViewBox(view) ? view.x : VIEW_PRESETS[activeHall].x} ${
+            isValidViewBox(view) ? view.y : VIEW_PRESETS[activeHall].y
+          } ${isValidViewBox(view) ? view.width : VIEW_PRESETS[activeHall].width} ${
+            isValidViewBox(view) ? view.height : VIEW_PRESETS[activeHall].height
+          }`}
           className={`interactive-svg-canvas ${dragging ? 'is-dragging' : ''}`}
+          style={{ touchAction: 'none' }}
           onWheel={handleWheel}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -942,7 +1072,8 @@ export default function InteractiveFloorMap({
               const { lines, fontSize, lineHeight } = getWrappedLines(
                 ex.companyName,
                 ex.width,
-                availableHeight
+                availableHeight,
+                isZoomedOut
               );
               const totalTextHeight = lines.length * lineHeight;
               const startY = ex.y + stripeH + (availableHeight - totalTextHeight) / 2 + fontSize * 0.85;
@@ -951,15 +1082,36 @@ export default function InteractiveFloorMap({
               return (
                 <g
                   key={ex.id}
-                  className="interactive-booth-group"
+                  className={`interactive-booth-group ${isSelected ? 'is-selected' : ''}`}
                   cursor="pointer"
-                  onClick={() => onSelectExhibitor(ex)}
+                  onClick={(e) => {
+                    if (!isDraggingRef.current) {
+                      e.stopPropagation();
+                      onSelectExhibitor(ex);
+                    }
+                  }}
+                  onPointerUp={(e) => {
+                    if (!isDraggingRef.current) {
+                      e.stopPropagation();
+                      onSelectExhibitor(ex);
+                    }
+                  }}
                   onPointerEnter={() => setHoveredExhibitor(ex)}
                   onPointerLeave={() => setHoveredExhibitor(null)}
                   role="button"
                   tabIndex={0}
                   aria-label={ex.companyName}
                 >
+                  {/* Invisible expanded touch hit target (ensures effortless finger selection on mobile) */}
+                  <rect
+                    x={ex.x - 4}
+                    y={ex.y - 4}
+                    width={ex.width + 8}
+                    height={ex.height + 8}
+                    fill="transparent"
+                    pointerEvents="all"
+                  />
+
                   {/* Subtle outer glow / selection halo */}
                   {(isSelected || isHovered) && (
                     <rect

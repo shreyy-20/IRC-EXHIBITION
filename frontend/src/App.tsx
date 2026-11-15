@@ -237,21 +237,29 @@ export default function App() {
     []
   );
 
-  // Selection handler (instantly calculates route and opens directions drawer)
+  // Selection handler (instantly calculates route, displays route on map, preserves viewport)
   const handleSelectExhibitor = useCallback((exhibitor: ClubbedExhibitor) => {
     setSelectedExhibitor(exhibitor);
     setActiveStepIndex(0);
     setIsNavigatingLive(false);
-    setDrawerOpen(true);
-    setDrawerMode('directions');
 
-    // Automatically adjust hall view if needed
-    if (exhibitor.hall === 'Hall-1') {
+    // On Kiosk display, open the side directions drawer.
+    // On Mobile phones, do NOT cover the map with a full drawer:
+    // keep the drawer closed so the floor map and drawn route remain 100% visible,
+    // with the bottom route bar showing distance, time, and "Show directions" button.
+    if (!isMobile) {
+      setDrawerOpen(true);
+      setDrawerMode('directions');
+    } else {
+      setDrawerOpen(false);
+    }
+
+    if (exhibitor.hall === 'Hall-1' && activeHall === 'hanger') {
       setActiveHall('hall-1');
-    } else if (exhibitor.hall === 'Hanger') {
+    } else if (exhibitor.hall === 'Hanger' && activeHall === 'hall-1') {
       setActiveHall('hanger');
     }
-  }, []);
+  }, [isMobile, activeHall]);
 
   // Start Live Indoor Navigation (Strictly on mobile devices / mobile view)
   const handleStartNavigation = useCallback(() => {
