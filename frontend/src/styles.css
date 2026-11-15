@@ -4151,7 +4151,6 @@ footer > span {
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f1f5f9;
-    background: #0b1120;
   }
 
   .topbar {

@@ -48,6 +48,26 @@ const API = cleanApi.endsWith('/api') ? cleanApi : `${cleanApi}/api`;
 
 const TOKEN_KEY = 'irc_admin_token';
 
+function safeGetStorage(key: string): string {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+function safeSetStorage(key: string, val: string): void {
+  try {
+    localStorage.setItem(key, val);
+  } catch {}
+}
+
+function safeRemoveStorage(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
 type AdminStats = {
   events: number;
   exhibitors: number;
@@ -77,7 +97,7 @@ export default function App() {
 
   // Admin state
   const [adminOpen, setAdminOpen] = useState(false);
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
+  const [token, setToken] = useState(() => safeGetStorage(TOKEN_KEY));
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
@@ -272,7 +292,7 @@ export default function App() {
       }
 
       const data = await response.json();
-      localStorage.setItem(TOKEN_KEY, data.access_token);
+      safeSetStorage(TOKEN_KEY, data.access_token);
       setToken(data.access_token);
       setPassword('');
       await loadAdminStats(data.access_token);
@@ -298,7 +318,7 @@ export default function App() {
   }
 
   function adminLogout() {
-    localStorage.removeItem(TOKEN_KEY);
+    safeRemoveStorage(TOKEN_KEY);
     setToken('');
     setAdminStats(null);
     setAdminError('');

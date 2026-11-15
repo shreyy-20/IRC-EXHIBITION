@@ -207,7 +207,16 @@ export function resolveInitialPosition(): PositioningState {
   }
 
   // 3. Fallback default
-  const defaultKiosk = PHYSICAL_KIOSKS.kiosk_entrance;
+  const defaultKiosk = PHYSICAL_KIOSKS?.kiosk_entrance || {
+    id: 'kiosk_entrance',
+    name: 'Kiosk 1 — Main Entrance',
+    locationName: 'Registration Foyer & Main Gate',
+    nodeId: 'entrance_main',
+    x: 1200,
+    y: 830,
+    hall: 'Hall-1' as const,
+    description: 'Touchscreen terminal at the visitor registration and security entrance.',
+  };
   return {
     source: 'kiosk',
     id: defaultKiosk.id,
