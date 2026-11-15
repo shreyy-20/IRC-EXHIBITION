@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from 'react';
@@ -38,6 +39,10 @@ import {
 
 import { type HallTab } from './components/HallSelector';
 import InteractiveFloorMap from './components/InteractiveFloorMap';
+import {
+  IndoorMotionTracker,
+  isMobileDevice,
+} from './data/indoorMotionTracker';
 
 // --------------------------------------------------
 // CONFIGURATION
@@ -89,6 +94,23 @@ export default function App() {
   const [activeRoute, setActiveRoute] = useState<RoutePath | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
   const [isNavigatingLive, setIsNavigatingLive] = useState<boolean>(false);
+
+  // Kiosk vs Mobile Device Mode
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkpoint') || params.get('cp')) return true;
+    if (params.get('kiosk')) return false;
+    return isMobileDevice();
+  });
+
+  // Real-time Indoor Motion & Sensor Fusion States
+  const [liveCoords, setLiveCoords] = useState<{ x: number; y: number } | null>(null);
+  const [liveHeading, setLiveHeading] = useState<number | null>(null);
+  const [liveWalkedMeters, setLiveWalkedMeters] = useState<number>(0);
+  const [liveStatusText, setLiveStatusText] = useState<string>('');
+  const [hasArrived, setHasArrived] = useState<boolean>(false);
+  const indoorTrackerRef = useRef<IndoorMotionTracker | null>(null);
 
   // Live Digital Clock (matching Reference Image 1)
   const [currentTime, setCurrentTime] = useState(() => {
@@ -231,10 +253,12 @@ export default function App() {
     }
   }, []);
 
-  // Start Live Indoor Navigation
+  // Start Live Indoor Navigation (Strictly on mobile devices / mobile view)
   const handleStartNavigation = useCallback(() => {
     if (activeRoute) {
       setIsNavigatingLive(true);
+      setHasArrived(false);
+      setLiveWalkedMeters(0);
     }
   }, [activeRoute]);
 
@@ -244,6 +268,70 @@ export default function App() {
     setSelectedExhibitor(null);
     setActiveRoute(null);
     setDrawerOpen(false);
+    setLiveCoords(null);
+    setLiveHeading(null);
+    setLiveWalkedMeters(0);
+    setLiveStatusText('');
+    setHasArrived(false);
+  }, []);
+
+  // Motion Tracker Lifecycle Effect (Runs sensors only when user presses START NAVIGATION)
+  useEffect(() => {
+    if (!isNavigatingLive || !activeRoute) {
+      if (indoorTrackerRef.current) {
+        indoorTrackerRef.current.stop();
+        indoorTrackerRef.current = null;
+      }
+      return;
+    }
+
+    const initialCoords = positionState.coords || { x: 1200, y: 830 };
+    const destNodeId = selectedExhibitor?.accessNodeId || null;
+
+    const tracker = new IndoorMotionTracker(initialCoords, {
+      onPositionUpdate: (coords: { x: number; y: number }, walkedM: number) => {
+        setLiveCoords(coords);
+        setLiveWalkedMeters(walkedM);
+      },
+      onHeadingUpdate: (heading: number) => {
+        setLiveHeading(heading);
+      },
+      onRerouteNeeded: (divergedNodeId: string) => {
+        if (selectedExhibitor) {
+          const newPath = findShortestPath(divergedNodeId, selectedExhibitor.accessNodeId || 'hall1_node_b2');
+          if (newPath) {
+            setActiveRoute(newPath);
+            tracker.setRoute(newPath, selectedExhibitor.accessNodeId || null);
+          }
+        }
+      },
+      onArrival: () => {
+        setHasArrived(true);
+        setLiveStatusText('You have arrived at your destination!');
+      },
+      onStatusChange: (status: string) => {
+        setLiveStatusText(status);
+      },
+    });
+
+    indoorTrackerRef.current = tracker;
+    tracker.setRoute(activeRoute, destNodeId);
+    tracker.start();
+
+    return () => {
+      tracker.stop();
+      indoorTrackerRef.current = null;
+    };
+  }, [isNavigatingLive, activeRoute, selectedExhibitor]);
+
+  const handleManualStepAdvance = useCallback(() => {
+    if (indoorTrackerRef.current) {
+      indoorTrackerRef.current.advanceManualStep(0.75);
+    }
+  }, []);
+
+  const handleReanchorCheckpoint = useCallback(() => {
+    setShowLocationModal(true);
   }, []);
 
   // Filtered exhibitors list for Directory mode
@@ -527,6 +615,18 @@ export default function App() {
             >
               Hanger ({hangerCount})
             </button>
+            <button
+              type="button"
+              className={`ref-hall-pill ${isMobile ? 'active' : ''}`}
+              onClick={() => {
+                setIsMobile((prev) => !prev);
+                setIsNavigatingLive(false);
+              }}
+              title={isMobile ? 'Current: Mobile View. Click for Kiosk Mode' : 'Current: Kiosk Mode. Click for Mobile View'}
+              style={{ fontWeight: 700 }}
+            >
+              {isMobile ? '📱 Mobile' : '🖥️ Kiosk'}
+            </button>
           </div>
 
           {/* Directory Drawer Toggle button */}
@@ -600,6 +700,14 @@ export default function App() {
               setDrawerMode('directions');
             }}
             drawerOpen={drawerOpen}
+            isMobile={isMobile}
+            liveCoords={liveCoords}
+            liveHeading={liveHeading}
+            liveWalkedMeters={liveWalkedMeters}
+            liveStatusText={liveStatusText}
+            hasArrived={hasArrived}
+            onManualStepAdvance={handleManualStepAdvance}
+            onReanchorCheckpoint={handleReanchorCheckpoint}
           />
         </div>
 
@@ -659,6 +767,38 @@ export default function App() {
                     <div className="ref-metric-label">at an easy pace</div>
                   </div>
                 </div>
+
+                {/* Mobile Start Live Navigation CTA inside Drawer */}
+                {isMobile && !isNavigatingLive && (
+                  <button
+                    type="button"
+                    className="ref-drawer-start-live-btn"
+                    onClick={() => {
+                      handleStartNavigation();
+                      setDrawerOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      margin: '12px 0 6px',
+                      padding: '13px 18px',
+                      background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontWeight: 800,
+                      fontSize: '15px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                    }}
+                  >
+                    <Smartphone size={18} />
+                    <span>START LIVE NAVIGATION</span>
+                  </button>
+                )}
 
                 {/* Step-by-Step Wayfinding List */}
                 <div className="ref-steps-list-container">

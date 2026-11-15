@@ -1,10 +1,9 @@
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import type { PointerEvent, WheelEvent } from 'react';
 import {
   Maximize2,
   Crosshair,
   Play,
-  Pause,
   Volume2,
   VolumeX,
   X,
@@ -36,6 +35,14 @@ type Props = {
   onStartNavigation?: () => void;
   onShowDirections?: () => void;
   drawerOpen?: boolean;
+  isMobile?: boolean;
+  liveCoords?: { x: number; y: number } | null;
+  liveHeading?: number | null;
+  liveWalkedMeters?: number;
+  liveStatusText?: string;
+  hasArrived?: boolean;
+  onManualStepAdvance?: () => void;
+  onReanchorCheckpoint?: () => void;
 };
 
 type ViewBox = {
@@ -194,8 +201,17 @@ export default function InteractiveFloorMap({
   onSelectStep,
   onExitNavigation,
   isNavigatingLive = false,
+  onStartNavigation,
   onShowDirections,
   drawerOpen = false,
+  isMobile = false,
+  liveCoords = null,
+  liveHeading = null,
+  liveWalkedMeters = 0,
+  liveStatusText = '',
+  hasArrived = false,
+  onManualStepAdvance,
+  onReanchorCheckpoint,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -207,14 +223,9 @@ export default function InteractiveFloorMap({
   const [hoveredPathway, setHoveredPathway] = useState<FloorPathway | null>(null);
   const showAisleLabels = false;
 
-  // Google Maps Style Live Navigation State
-  const [isWalking, setIsWalking] = useState(false);
-  const [walkProgressSvg, setWalkProgressSvg] = useState(0);
-  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  // Live Navigation States
   const [isCameraFollowEnabled, setIsCameraFollowEnabled] = useState(true);
-  const [userBearing, setUserBearing] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [hasArrived, setHasArrived] = useState(false);
 
   const dragRef = useRef<{
     x: number;
@@ -255,186 +266,130 @@ export default function InteractiveFloorMap({
     return list;
   }, [route]);
 
-  const totalSvgLength = useMemo(() => {
-    return segments.reduce((sum, s) => sum + s.length, 0);
-  }, [segments]);
-
-  // Reset navigation when route or selected exhibitor changes
-  useEffect(() => {
-    if (route) {
-      setHasArrived(false);
-      lastChimedStepRef.current = -1;
-      if (segments[0]) {
-        setUserBearing(segments[0].angleDeg);
-      }
-      if (isNavigatingLive) {
-        setIsWalking(true);
-        setIsCameraFollowEnabled(true);
-      } else {
-        setIsWalking(false);
-        setWalkProgressSvg(0);
-        setIsCameraFollowEnabled(false);
-
-        // Frame route cleanly according to halls traversed
-        if (route.nodes.length > 0) {
-          const hasHall1 = route.nodes.some((n) => n.x >= 750);
-          const hasHanger = route.nodes.some((n) => n.x <= 850);
-          if (hasHall1 && hasHanger) {
-            setView(VIEW_PRESETS['all']);
-            setZoom(1);
-          } else if (hasHall1) {
-            setView(VIEW_PRESETS['hall-1']);
-            setZoom(1);
-          } else {
-            setView(VIEW_PRESETS['hanger']);
-            setZoom(1);
-          }
-        }
-      }
-    } else {
-      setIsWalking(false);
-      setWalkProgressSvg(0);
-      setHasArrived(false);
-      setIsCameraFollowEnabled(false);
+  // Current User Position (Live from phone sensors when navigating, or fixed start anchor)
+  const currentUserPos = useMemo(() => {
+    if (isNavigatingLive && liveCoords) {
+      return liveCoords;
     }
-  }, [route, segments, isNavigatingLive]);
-
-  // Jump pointer when parent selects a specific step index
-  useEffect(() => {
-    if (
-      activeStepIndex !== null &&
-      activeStepIndex !== undefined &&
-      segments.length > 0 &&
-      !isWalking
-    ) {
-      const targetSeg = segments[activeStepIndex - 1] || segments[0];
-      setWalkProgressSvg(targetSeg.cumDistSvg);
-      setIsCameraFollowEnabled(true);
-      setUserBearing(targetSeg.angleDeg);
+    if (route && route.nodes.length > 0) {
+      return { x: route.nodes[0].x, y: route.nodes[0].y };
     }
-  }, [activeStepIndex, segments, isWalking]);
+    return { x: 1200, y: 830 };
+  }, [isNavigatingLive, liveCoords, route]);
 
-  // Sync view when activeHall changes (only if no active navigation)
-  useEffect(() => {
-    if (!route) {
-      setView(VIEW_PRESETS[activeHall]);
-      setZoom(1);
+  // User Heading / Compass Bearing
+  const userBearing = useMemo(() => {
+    if (isNavigatingLive && liveHeading !== null && liveHeading !== undefined) {
+      return liveHeading;
     }
-  }, [activeHall, route]);
+    if (segments.length > 0) {
+      return segments[0].angleDeg;
+    }
+    return 0;
+  }, [isNavigatingLive, liveHeading, segments]);
 
-  // Animation Loop (60fps continuous smooth walking along path)
-  useEffect(() => {
-    if (!isWalking || !route || totalSvgLength <= 0 || hasArrived) return;
+  // Remaining Distance in Meters
+  const remainingDistanceMeters = useMemo(() => {
+    if (!route) return 0;
+    if (hasArrived) return 0;
+    if (isNavigatingLive && liveWalkedMeters > 0) {
+      return Math.max(0, Math.round(route.distanceMeters - liveWalkedMeters));
+    }
+    return route.distanceMeters;
+  }, [route, hasArrived, isNavigatingLive, liveWalkedMeters]);
 
-    let lastTime = performance.now();
-    let animId: number;
-
-    const loop = (currentTime: number) => {
-      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
-      lastTime = currentTime;
-
-      // Normal walking speed: ~1.2 m/s base speed
-      const svgUnitsPerMeter =
-        route.distanceMeters > 0 ? totalSvgLength / route.distanceMeters : 1;
-      const deltaSvg = 1.2 * speedMultiplier * svgUnitsPerMeter * dt;
-
-      setWalkProgressSvg((prev) => {
-        const next = prev + deltaSvg;
-        if (next >= totalSvgLength) {
-          setIsWalking(false);
-          setHasArrived(true);
-          if (soundEnabled) playArrivalChime();
-          return totalSvgLength;
-        }
-        return next;
-      });
-
-      animId = requestAnimationFrame(loop);
-    };
-
-    animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
-  }, [isWalking, route, totalSvgLength, speedMultiplier, soundEnabled, hasArrived]);
-
-  // Calculate current user position, active segment, and metrics
-  const {
-    currentUserPos,
-    currentSegment,
-    currentStepIndex,
-    remainingDistanceMeters,
-    distanceToNextTurn,
-  } = useMemo(() => {
+  // Active Segment & Turn Distance Calculation
+  const { currentStepIndex, distanceToNextTurn } = useMemo(() => {
     if (!route || segments.length === 0) {
-      return {
-        currentUserPos: route?.nodes[0]
-          ? { x: route.nodes[0].x, y: route.nodes[0].y }
-          : { x: 1200, y: 830 },
-        currentSegment: null,
-        currentStepIndex: 0,
-        remainingDistanceMeters: route?.distanceMeters || 0,
-        distanceToNextTurn: 0,
-      };
+      return { currentStepIndex: 0, distanceToNextTurn: 0 };
     }
 
-    let currentSeg = segments[0];
+    let bestSeg = segments[0];
+    let bestDist = Infinity;
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
-      if (
-        walkProgressSvg >= seg.cumDistSvg &&
-        walkProgressSvg <= seg.cumDistSvg + seg.length
-      ) {
-        currentSeg = seg;
-        break;
-      }
-      if (i === segments.length - 1) {
-        currentSeg = seg;
+      const midX = (seg.fromNode.x + seg.toNode.x) / 2;
+      const midY = (seg.fromNode.y + seg.toNode.y) / 2;
+      const d = Math.hypot(midX - currentUserPos.x, midY - currentUserPos.y);
+      if (d < bestDist) {
+        bestDist = d;
+        bestSeg = seg;
       }
     }
 
-    const distIntoSeg = Math.max(
-      0,
-      Math.min(currentSeg.length, walkProgressSvg - currentSeg.cumDistSvg)
+    const distToTurn = Math.round(
+      Math.hypot(bestSeg.toNode.x - currentUserPos.x, bestSeg.toNode.y - currentUserPos.y) * 0.1
     );
-    const alpha = currentSeg.length > 0 ? distIntoSeg / currentSeg.length : 0;
-    const userX = currentSeg.fromNode.x + alpha * currentSeg.dx;
-    const userY = currentSeg.fromNode.y + alpha * currentSeg.dy;
-
-    const progressRatio = totalSvgLength > 0 ? walkProgressSvg / totalSvgLength : 0;
-    const remainingM = Math.max(0, Math.round(route.distanceMeters * (1 - progressRatio)));
-
-    const distToNextTurnSvg = currentSeg.length - distIntoSeg;
-    const metersPerSvg =
-      route.distanceMeters > 0 ? route.distanceMeters / totalSvgLength : 0.1;
-    const distToNextM = Math.max(0, Math.round(distToNextTurnSvg * metersPerSvg));
 
     return {
-      currentUserPos: { x: userX, y: userY },
-      currentSegment: currentSeg,
-      currentStepIndex: currentSeg.stepIndex,
-      remainingDistanceMeters: remainingM,
-      distanceToNextTurn: distToNextM,
+      currentStepIndex: bestSeg.stepIndex,
+      distanceToNextTurn: distToTurn,
     };
-  }, [route, segments, walkProgressSvg, totalSvgLength]);
+  }, [route, segments, currentUserPos]);
 
-  // Update bearing and trigger turn sound when entering new step
+  // Play arrival chime on arrival
   useEffect(() => {
-    if (!currentSegment) return;
-    setUserBearing(currentSegment.angleDeg);
+    if (hasArrived && soundEnabled) {
+      playArrivalChime();
+    }
+  }, [hasArrived, soundEnabled]);
 
-    if (
-      soundEnabled &&
-      currentStepIndex > 0 &&
-      lastChimedStepRef.current !== currentStepIndex
-    ) {
+  // Turn chime when advancing to a new step
+  useEffect(() => {
+    if (soundEnabled && isNavigatingLive && currentStepIndex > 0 && lastChimedStepRef.current !== currentStepIndex) {
       lastChimedStepRef.current = currentStepIndex;
       playTurnChime();
     }
+  }, [currentStepIndex, isNavigatingLive, soundEnabled]);
 
-    // Inform parent step tracker
+  // Mobile Camera Auto-Follow (Center smoothly around user's walking dot)
+  useEffect(() => {
+    if (!isNavigatingLive || !isMobile || !isCameraFollowEnabled || !currentUserPos) return;
+
+    setView((curr) => {
+      const targetW = 680;
+      const targetH = 480;
+      const targetX = currentUserPos.x - targetW / 2;
+      const targetY = currentUserPos.y - targetH / 2;
+
+      return {
+        x: curr.x + (targetX - curr.x) * 0.25,
+        y: curr.y + (targetY - curr.y) * 0.25,
+        width: targetW,
+        height: targetH,
+      };
+    });
+  }, [currentUserPos, isNavigatingLive, isMobile, isCameraFollowEnabled]);
+
+  // Kiosk Static Framing (Map layout stays static, stable and framed per hall)
+  useEffect(() => {
+    if (route && route.nodes.length > 0 && !isNavigatingLive) {
+      const hasHall1 = route.nodes.some((n) => n.x >= 750);
+      const hasHanger = route.nodes.some((n) => n.x <= 850);
+      if (hasHall1 && hasHanger) {
+        setView(VIEW_PRESETS['all']);
+      } else if (hasHall1) {
+        setView(VIEW_PRESETS['hall-1']);
+      } else {
+        setView(VIEW_PRESETS['hanger']);
+      }
+    }
+  }, [route, isNavigatingLive]);
+
+  // Sync view when activeHall changes
+  useEffect(() => {
+    if (!route && !isNavigatingLive) {
+      setView(VIEW_PRESETS[activeHall]);
+      setZoom(1);
+    }
+  }, [activeHall, route, isNavigatingLive]);
+
+  // Inform parent step tracker
+  useEffect(() => {
     if (currentStepIndex !== activeStepIndex) {
       onSelectStep?.(currentStepIndex);
     }
-  }, [currentSegment, currentStepIndex, activeStepIndex, onSelectStep, soundEnabled]);
+  }, [currentStepIndex, activeStepIndex, onSelectStep]);
 
   // Static Map Layout: Camera auto-follow is disabled to keep the kiosk map static and stable
   useEffect(() => {
@@ -504,21 +459,6 @@ export default function InteractiveFloorMap({
     dragRef.current = null;
     setDragging(false);
   }
-
-  const handleScrubberChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseFloat(e.target.value);
-      setWalkProgressSvg(val);
-      setIsCameraFollowEnabled(true);
-      if (val >= totalSvgLength) {
-        setHasArrived(true);
-        setIsWalking(false);
-      } else {
-        setHasArrived(false);
-      }
-    },
-    [totalSvgLength]
-  );
 
   // Filter exhibitors: display officially allotted exhibitor stalls only
   const visibleExhibitors = useMemo(() => {
@@ -669,7 +609,9 @@ export default function InteractiveFloorMap({
           <div className="reference-bottom-route-bar">
             <div className="reference-route-summary-card">
               <span className="ref-route-meters">{route.distanceMeters} m</span>
-              <span className="ref-route-text">about {route.walkingMinutes} min walk from Main Gate</span>
+              <span className="ref-route-text">
+                about {route.walkingMinutes} min walk from {route.nodes[0]?.label || 'Start'}
+              </span>
               <button
                 type="button"
                 className="ref-route-end-btn"
@@ -679,16 +621,30 @@ export default function InteractiveFloorMap({
                 End route
               </button>
             </div>
-            <button
-              type="button"
-              className="ref-show-directions-btn"
-              onClick={() => onShowDirections?.()}
-              title="Show turn-by-turn directions"
-            >
-              <Search size={16} />
-              <span>Show directions</span>
-              <span className="ref-sparkle-dot" />
-            </button>
+
+            <div className="ref-bottom-actions-cluster">
+              {isMobile && onStartNavigation && (
+                <button
+                  type="button"
+                  className="ref-start-live-nav-btn"
+                  onClick={() => onStartNavigation()}
+                  title="Start live movement navigation"
+                >
+                  <Play size={16} fill="currentColor" />
+                  <span>START NAVIGATION</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="ref-show-directions-btn"
+                onClick={() => onShowDirections?.()}
+                title="Show turn-by-turn directions"
+              >
+                <Search size={16} />
+                <span>Show directions</span>
+                <span className="ref-sparkle-dot" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -1253,61 +1209,49 @@ export default function InteractiveFloorMap({
         )}
 
         {/* ========================================================
-            GOOGLE MAPS BOTTOM NAVIGATION CONTROLLER BAR
+            REAL-TIME MOBILE INDOOR NAVIGATION CONTROLLER
            ======================================================== */}
         {route && isNavigatingLive && (
-          <div className="google-nav-bottom-bar">
+          <div className="google-nav-bottom-bar real-sensor-bar">
             {/* Top row: Metrics and ETA */}
             <div className="gmaps-bottom-metrics-row">
               <div className="gmaps-eta-col">
                 <span className="gmaps-time-remaining">{etaMinutes} min</span>
-                <span className="gmaps-distance-remaining">({remainingDistanceMeters} m)</span>
+                <span className="gmaps-distance-remaining">({remainingDistanceMeters} m remaining)</span>
                 <span className="gmaps-eta-clock">· ETA {etaTimeStr}</span>
               </div>
 
               <div className="gmaps-controls-col">
-                {/* Speed selector (1x, 2x, 3x) */}
-                <div className="gmaps-speed-pills">
-                  {[1, 2, 3].map((sp) => (
-                    <button
-                      key={`speed-${sp}`}
-                      type="button"
-                      className={`gmaps-speed-btn ${speedMultiplier === sp ? 'is-active' : ''}`}
-                      onClick={() => setSpeedMultiplier(sp)}
-                      title={`Walking speed ${sp}x (${(sp * 1.2).toFixed(1)} m/s)`}
-                    >
-                      {sp}x
-                    </button>
-                  ))}
-                </div>
+                {/* Manual step advance button for indoor testing or steady holding */}
+                {onManualStepAdvance && (
+                  <button
+                    type="button"
+                    className="gmaps-step-advance-btn"
+                    onClick={onManualStepAdvance}
+                    title="Advance step manually (indoor walking test)"
+                  >
+                    <span>👣 Take Step</span>
+                  </button>
+                )}
 
-                {/* Play / Pause Walk simulation */}
-                <button
-                  type="button"
-                  className={`gmaps-play-btn ${isWalking ? 'is-playing' : ''}`}
-                  onClick={() => {
-                    if (hasArrived) {
-                      setWalkProgressSvg(0);
-                      setHasArrived(false);
-                      setIsWalking(true);
-                      setIsCameraFollowEnabled(true);
-                    } else {
-                      setIsWalking((prev) => !prev);
-                      setIsCameraFollowEnabled(true);
-                    }
-                  }}
-                  title={isWalking ? 'Pause walking' : 'Resume walking'}
-                >
-                  {isWalking ? <Pause size={17} /> : <Play size={17} />}
-                  <span>{isWalking ? 'Pause' : hasArrived ? 'Restart' : 'Resume'}</span>
-                </button>
+                {/* Re-anchor checkpoint button */}
+                {onReanchorCheckpoint && (
+                  <button
+                    type="button"
+                    className="gmaps-reanchor-btn"
+                    onClick={onReanchorCheckpoint}
+                    title="Re-anchor at nearest QR totem"
+                  >
+                    <span>📍 Checkpoint</span>
+                  </button>
+                )}
 
                 {/* Exit Navigation */}
                 <button
                   type="button"
                   className="gmaps-exit-btn"
                   onClick={() => onExitNavigation?.()}
-                  title="Exit navigation"
+                  title="Exit live navigation"
                 >
                   <X size={17} />
                   <span>Exit</span>
@@ -1315,18 +1259,12 @@ export default function InteractiveFloorMap({
               </div>
             </div>
 
-            {/* Bottom row: Interactive Progress Scrubber */}
-            <div className="gmaps-scrubber-row">
-              <input
-                type="range"
-                min="0"
-                max={Math.max(1, totalSvgLength)}
-                step="1"
-                value={walkProgressSvg}
-                onChange={handleScrubberChange}
-                className="gmaps-progress-slider"
-                title="Drag to preview position along route"
-              />
+            {/* Bottom status row: Displays real indoor sensor status */}
+            <div className="gmaps-sensor-status-row">
+              <span className="sensor-indicator-dot active" />
+              <span className="sensor-status-label">
+                {liveStatusText || 'Indoor Sensor Tracking Active (Dead-Reckoning & Gyroscope)'}
+              </span>
             </div>
           </div>
         )}
