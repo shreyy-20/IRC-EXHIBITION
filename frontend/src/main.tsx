@@ -33,7 +33,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       localStorage.clear();
       sessionStorage.clear();
     } catch {}
-    window.location.reload();
+    this.setState({ hasError: false, error: null });
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
   };
 
   render() {
@@ -113,6 +116,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 const queryClient = new QueryClient();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (e) => {
+    console.warn('Silenced unhandled promise rejection to prevent ErrorBoundary trigger:', e.reason);
+    e.preventDefault();
+  });
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

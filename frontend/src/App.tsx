@@ -389,6 +389,7 @@ export default function App() {
 
     for (let i = 0; i < activeRoute.steps.length; i++) {
       const s = activeRoute.steps[i];
+      if (!s) continue;
       const isFirst = i === 0;
       const isLast = i === activeRoute.steps.length - 1;
 
@@ -398,7 +399,8 @@ export default function App() {
       else if (isLast) icon = 'arrive';
 
       let text = '';
-      const cleanName = s.aisleName
+      const rawAisle = s.aisleName || 'Main Walkway';
+      const cleanName = rawAisle
         .replace(/Corridor|Aisle|Promenade|6\.0M|4\.0M|2\.5M/gi, '')
         .trim();
 
@@ -411,7 +413,7 @@ export default function App() {
         } else if (s.turnType === 'left') {
           text = `Go left past ${cleanName || 'Fujifilm India'}`;
         } else {
-          text = `Head straight along ${s.aisleName}`;
+          text = `Head straight along ${rawAisle}`;
         }
       } else {
         if (s.turnType === 'right') {
@@ -419,16 +421,16 @@ export default function App() {
         } else if (s.turnType === 'left') {
           text = `Turn left at ${cleanName || 'ISNT Pavilion'}`;
         } else if (s.turnType === 'passage') {
-          text = `Pass through connecting passage to ${s.hall}`;
+          text = `Pass through connecting passage to ${s.hall || 'connecting hall'}`;
         } else {
-          text = `Continue along ${s.aisleName}`;
+          text = `Continue along ${rawAisle}`;
         }
       }
 
       list.push({
         icon,
         text,
-        dist: `${s.distanceM} m`,
+        dist: `${s.distanceM ?? 0} m`,
       });
     }
 

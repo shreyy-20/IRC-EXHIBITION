@@ -974,7 +974,7 @@ export default function InteractiveFloorMap({
              ======================================================== */}
           <g id="floor-pathways-layer">
             {visiblePathways.map((pathway) => {
-              const isTraversed = route?.pathwayIds.includes(pathway.id);
+              const isTraversed = Boolean(route?.pathwayIds && route.pathwayIds.includes(pathway.id));
 
               let fillColor = 'url(#aisleTile)';
               let strokeColor = '#cbd5e1';
@@ -1211,7 +1211,7 @@ export default function InteractiveFloorMap({
               />
 
               {/* Destination Teardrop Pin (Google Maps Red Marker at Target Stall) */}
-              {route.nodes[route.nodes.length - 1] && (
+              {route.nodes && route.nodes.length > 0 && route.nodes[route.nodes.length - 1] && (
                 <g
                   transform={`translate(${route.nodes[route.nodes.length - 1].x}, ${
                     route.nodes[route.nodes.length - 1].y
@@ -1233,11 +1233,11 @@ export default function InteractiveFloorMap({
           )}
 
           {/* ========================================================
-              "YOU ARE HERE" PUCK & SPEECH BUBBLE AT MAIN GATE (IMAGE 1)
+              "YOU ARE HERE" PUCK & SPEECH BUBBLE AT ACTIVE KIOSK (IMAGE 1)
              ======================================================== */}
           <g
             id="you-are-here-marker"
-            transform={`translate(${route?.nodes[0]?.x ?? 1200}, ${route?.nodes[0]?.y ?? 830})`}
+            transform={`translate(${currentUserPos.x}, ${currentUserPos.y})`}
             pointerEvents="none"
           >
             {/* Concentric animated pulse ring */}
