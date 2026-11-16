@@ -154,7 +154,7 @@ export default function App() {
   useEffect(() => {
     if (selectedExhibitor) {
       const targetNode = selectedExhibitor.accessNodeId || 'hall1_node_b2';
-      const path = findShortestPath(positionState.nodeId, targetNode);
+      const path = findShortestPath(positionState.nodeId, targetNode, selectedExhibitor);
       setActiveRoute(path);
 
       // Track analytics asynchronously
@@ -246,7 +246,7 @@ export default function App() {
 
     // Synchronously calculate route from current kiosk position to target stall
     const targetNode = exhibitor.accessNodeId || 'hall1_node_b2';
-    const path = findShortestPath(positionState.nodeId, targetNode);
+    const path = findShortestPath(positionState.nodeId, targetNode, exhibitor);
     setActiveRoute(path);
 
     // On Kiosk display, open the side directions drawer.
@@ -321,7 +321,7 @@ export default function App() {
       },
       onRerouteNeeded: (divergedNodeId: string) => {
         if (selectedExhibitor) {
-          const newPath = findShortestPath(divergedNodeId, selectedExhibitor.accessNodeId || 'hall1_node_b2');
+          const newPath = findShortestPath(divergedNodeId, selectedExhibitor.accessNodeId || 'hall1_node_b2', selectedExhibitor);
           if (newPath) {
             setActiveRoute(newPath);
             tracker.setRoute(newPath, selectedExhibitor.accessNodeId || null);
@@ -375,7 +375,7 @@ export default function App() {
   // Turn steps generator matching Reference Images 2 & 3
   const turnSteps = useMemo(() => {
     if (!activeRoute || !selectedExhibitor) return [];
-    if (activeRoute.steps.length === 0) {
+    if (!activeRoute.steps || activeRoute.steps.length === 0) {
       return [
         {
           icon: 'arrive' as const,
@@ -385,64 +385,18 @@ export default function App() {
       ];
     }
 
-    const list: Array<{ icon: 'left' | 'right' | 'straight' | 'arrive'; text: string; dist: string }> = [];
-
-    for (let i = 0; i < activeRoute.steps.length; i++) {
-      const s = activeRoute.steps[i];
-      if (!s) continue;
-      const isFirst = i === 0;
-      const isLast = i === activeRoute.steps.length - 1;
-
+    return activeRoute.steps.map((s, idx) => {
       let icon: 'left' | 'right' | 'straight' | 'arrive' = 'straight';
       if (s.turnType === 'left') icon = 'left';
       else if (s.turnType === 'right') icon = 'right';
-      else if (isLast) icon = 'arrive';
+      else if (s.turnType === 'arrive' || idx === activeRoute.steps.length - 1) icon = 'arrive';
 
-      let text = '';
-      const rawAisle = s.aisleName || 'Main Walkway';
-      const cleanName = rawAisle
-        .replace(/Corridor|Aisle|Promenade|6\.0M|4\.0M|2\.5M/gi, '')
-        .trim();
-
-      if (isLast) {
-        icon = 'arrive';
-        text = `${selectedExhibitor.companyName} is on your right`;
-      } else if (isFirst) {
-        if (s.turnType === 'right') {
-          text = `Go right past ${cleanName || 'MR Chemie'}`;
-        } else if (s.turnType === 'left') {
-          text = `Go left past ${cleanName || 'Fujifilm India'}`;
-        } else {
-          text = `Head straight along ${rawAisle}`;
-        }
-      } else {
-        if (s.turnType === 'right') {
-          text = `Turn right at ${cleanName || 'intersection'}`;
-        } else if (s.turnType === 'left') {
-          text = `Turn left at ${cleanName || 'ISNT Pavilion'}`;
-        } else if (s.turnType === 'passage') {
-          text = `Pass through connecting passage to ${s.hall || 'connecting hall'}`;
-        } else {
-          text = `Continue along ${rawAisle}`;
-        }
-      }
-
-      list.push({
+      return {
         icon,
-        text,
-        dist: `${s.distanceM ?? 0} m`,
-      });
-    }
-
-    if (list.length === 0 || list[list.length - 1].icon !== 'arrive') {
-      list.push({
-        icon: 'arrive',
-        text: `${selectedExhibitor.companyName} is on your right`,
-        dist: '',
-      });
-    }
-
-    return list;
+        text: s.instruction,
+        dist: s.distanceM ? `${s.distanceM} m` : '',
+      };
+    });
   }, [activeRoute, selectedExhibitor]);
 
   function getCompanyMonogram(name: string): string {
@@ -506,7 +460,7 @@ export default function App() {
       setPositionState(newPos);
       if (selectedExhibitor) {
         const targetNode = selectedExhibitor.accessNodeId || 'hall1_node_b2';
-        const path = findShortestPath(newPos.nodeId, targetNode);
+        const path = findShortestPath(newPos.nodeId, targetNode, selectedExhibitor);
         setActiveRoute(path);
       }
     }

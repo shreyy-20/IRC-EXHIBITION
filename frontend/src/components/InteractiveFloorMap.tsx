@@ -164,11 +164,11 @@ function getWrappedLines(
   const targetName = isSimplified ? cleanSimplifiedName(companyName) : companyName.trim();
   const words = targetName.split(/\s+/).filter(Boolean);
 
-  let fontSize = 9;
-  if (width < 50 || height < 36) fontSize = 7;
-  else if (width < 70 || height < 46) fontSize = 8;
-  else if (width >= 110 && height >= 65) fontSize = 10;
-  else if (width >= 140 && height >= 80) fontSize = 11.5;
+  let fontSize = 9.5;
+  if (width < 50 || height < 36) fontSize = 8.5;
+  else if (width < 70 || height < 46) fontSize = 9;
+  else if (width >= 110 && height >= 65) fontSize = 11;
+  else if (width >= 140 && height >= 80) fontSize = 12.5;
 
   const lineHeight = fontSize * 1.25;
   const paddingX = 4;
@@ -976,27 +976,29 @@ export default function InteractiveFloorMap({
             {visiblePathways.map((pathway) => {
               const isTraversed = Boolean(route?.pathwayIds && route.pathwayIds.includes(pathway.id));
 
-              let fillColor = 'url(#aisleTile)';
+              let fillColor = '#f8fafc';
               let strokeColor = '#cbd5e1';
               let strokeWidth = 1;
-              let fillOpacity = 0.95;
+              let fillOpacity = 1;
 
-              if (pathway.type === 'grand_aisle') {
-                fillColor = '#f8fafc';
-                strokeColor = '#94a3b8';
+              if (pathway.type === 'passage') {
+                fillColor = '#fef3c7';
+                strokeColor = '#f59e0b';
+                strokeWidth = 1.8;
+              } else if (pathway.type === 'grand_aisle') {
+                fillColor = '#f1f5f9';
+                strokeColor = '#cbd5e1';
+                strokeWidth = 1;
               } else if (pathway.type === 'promenade') {
-                fillColor = '#fdf4ff';
-                strokeColor = '#e879f9';
-              } else if (pathway.type === 'passage') {
-                fillColor = 'url(#passageHatch)';
-                strokeColor = '#f97316';
+                fillColor = '#f8fafc';
+                strokeColor = '#cbd5e1';
+                strokeWidth = 1;
               }
 
               if (isTraversed) {
                 fillColor = '#e0f2fe';
-                strokeColor = '#0284c7';
-                strokeWidth = 2.5;
-                fillOpacity = 1;
+                strokeColor = '#38bdf8';
+                strokeWidth = 2;
               }
 
               return (
@@ -1013,44 +1015,31 @@ export default function InteractiveFloorMap({
                     strokeWidth={strokeWidth}
                   />
 
-                  {isTraversed && (
-                    <rect
-                      x={pathway.x}
-                      y={pathway.y}
-                      width={pathway.width}
-                      height={pathway.height}
-                      rx="4"
-                      fill="url(#activeCorridorPattern)"
-                    />
-                  )}
-
-                  {showAisleLabels && (
+                  {showAisleLabels && pathway.type === 'passage' && (
                     <g
                       transform={`translate(${pathway.labelX}, ${pathway.labelY})`}
                       className="aisle-badge-group"
                       pointerEvents="none"
                     >
                       <rect
-                        x={pathway.orientation === 'horizontal' ? -65 : -35}
-                        y={-9}
-                        width={pathway.orientation === 'horizontal' ? 130 : 70}
-                        height={18}
-                        rx="9"
-                        fill={isTraversed ? '#0284c7' : '#334155'}
-                        opacity={isTraversed ? 0.95 : 0.85}
+                        x="-105"
+                        y="-10"
+                        width="210"
+                        height="20"
+                        rx="10"
+                        fill="#f59e0b"
+                        opacity="0.95"
                       />
                       <text
                         x="0"
-                        y="3.5"
+                        y="4"
                         fill="#ffffff"
-                        fontSize={pathway.orientation === 'horizontal' ? '8.5' : '7.5'}
+                        fontSize="9"
                         fontWeight="800"
                         textAnchor="middle"
-                        letterSpacing="0.6"
+                        letterSpacing="0.8"
                       >
-                        {pathway.orientation === 'horizontal'
-                          ? `[ ${pathway.widthLabel} · ${pathway.shortName} ]`
-                          : pathway.widthLabel}
+                        ◄ INTER-HALL COVERED PASSAGE (2.5M) ►
                       </text>
                     </g>
                   )}
@@ -1067,7 +1056,7 @@ export default function InteractiveFloorMap({
               const isSelected = selectedExhibitor?.id === ex.id;
 
               const badge = getStallBadge(ex);
-              const stripeH = Math.min(15, Math.max(5, ex.height * 0.16));
+              const stripeH = Math.max(12, Math.min(18, ex.height * 0.24));
               const availableHeight = ex.height - stripeH;
               const { lines, fontSize, lineHeight } = getWrappedLines(
                 ex.companyName,
@@ -1113,8 +1102,8 @@ export default function InteractiveFloorMap({
                       y={ex.y - 3}
                       width={ex.width + 6}
                       height={ex.height + 6}
-                      rx="8"
-                      fill="#ea580c"
+                      rx="6"
+                      fill="#dc2626"
                       opacity={0.35}
                     />
                   )}
@@ -1126,10 +1115,10 @@ export default function InteractiveFloorMap({
                     y={ex.y}
                     width={ex.width}
                     height={ex.height}
-                    rx="6"
+                    rx="4"
                     fill="#ffffff"
-                    stroke={isSelected ? '#ea580c' : '#cbd5e1'}
-                    strokeWidth={isSelected ? 3.5 : 1.2}
+                    stroke={isSelected ? '#dc2626' : '#64748b'}
+                    strokeWidth={isSelected ? 3.5 : 1.8}
                     filter="drop-shadow(0 2px 4px rgba(0,0,0,0.06))"
                   />
 
@@ -1139,17 +1128,17 @@ export default function InteractiveFloorMap({
                     y={ex.y + 1}
                     width={Math.max(1, ex.width - 2)}
                     height={stripeH}
-                    rx="5"
+                    rx="3"
                     fill={badge.stripeColor}
                   />
 
                   {/* Category / Stall Label inside top stripe */}
-                  {ex.height >= 30 && (
+                  {ex.height >= 26 && (
                     <text
                       x={centerX}
-                      y={ex.y + stripeH * 0.78}
+                      y={ex.y + stripeH * 0.76}
                       fill="#ffffff"
-                      fontSize={Math.max(7, Math.min(9.5, ex.width * 0.08))}
+                      fontSize={Math.max(8, Math.min(9.5, ex.width * 0.09))}
                       fontWeight="800"
                       textAnchor="middle"
                       letterSpacing="0.6"
@@ -1165,7 +1154,7 @@ export default function InteractiveFloorMap({
                     y={startY}
                     fill="#0f172a"
                     fontSize={fontSize}
-                    fontWeight="700"
+                    fontWeight="800"
                     textAnchor="middle"
                     pointerEvents="none"
                   >

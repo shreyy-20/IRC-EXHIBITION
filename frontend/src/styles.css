@@ -4150,7 +4150,7 @@ footer > span {
 /* --------------------------------------------------------------------------
    12. ACCESSIBILITY: DARK SCHEME COMPATIBILITY (prefers-color-scheme: dark)
    -------------------------------------------------------------------------- */
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark-disabled) {
   :root {
     color: #f1f5f9;
   }

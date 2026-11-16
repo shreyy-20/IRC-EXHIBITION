@@ -192,14 +192,14 @@ export const FLOOR_PATHWAYS: FloorPathway[] = [
     widthLabel: '2.5M',
     widthMeters: 2.5,
     type: 'passage',
-    x: 745,
+    x: 690,
     y: 415,
-    width: 105,
+    width: 200,
     height: 70,
-    labelX: 797,
+    labelX: 790,
     labelY: 450,
     orientation: 'horizontal',
-    description: 'Dedicated 2.5m covered connector linking Hall-1 (Central Aisle) with Hanger (East Avenue)',
+    description: 'Dedicated 2.5m covered connector linking Hall-1 (West Corridor) with Hanger (East Avenue)',
   },
 
   // ==========================================

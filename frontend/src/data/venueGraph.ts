@@ -38,6 +38,9 @@ export const VENUE_NODES: Record<string, NavNode> = {
   hall1_mid_c2: { id: 'hall1_mid_c2', label: 'Hall-1 Center Junction 2', x: 1270, y: 520, hall: 'Hall-1', type: 'aisle' },
   hall1_mid_e: { id: 'hall1_mid_e', label: 'Hall-1 East Corridor (Mid)', x: 1450, y: 520, hall: 'Hall-1', type: 'aisle' },
 
+  // Hall-1 West Corridor Passage Junction (Y: 450)
+  hall1_west_passage_jct: { id: 'hall1_west_passage_jct', label: 'Hall-1 West Passage Junction', x: 890, y: 450, hall: 'Hall-1', type: 'aisle' },
+
   // Hall-1 Upper Corridor (Y: 320)
   hall1_north_w: { id: 'hall1_north_w', label: 'Hall-1 West Corridor (North)', x: 890, y: 320, hall: 'Hall-1', type: 'aisle' },
   hall1_north_c1: { id: 'hall1_north_c1', label: 'Hall-1 North Junction 1', x: 1070, y: 320, hall: 'Hall-1', type: 'aisle' },
@@ -49,10 +52,10 @@ export const VENUE_NODES: Record<string, NavNode> = {
   hall1_top_mid: { id: 'hall1_top_mid', label: 'Hall-1 Top Perimeter Center', x: 1200, y: 140, hall: 'Hall-1', type: 'aisle' },
   hall1_top_e: { id: 'hall1_top_e', label: 'Hall-1 Top Perimeter East', x: 1450, y: 140, hall: 'Hall-1', type: 'aisle' },
 
-  // Connecting Passage
+  // Connecting Covered Passage (Perfect horizontal axis Y: 450)
   passage_hall1_gate: { id: 'passage_hall1_gate', label: 'Hall-1 Passage Entrance', x: 860, y: 450, hall: 'Passage', type: 'passage' },
-  passage_mid: { id: 'passage_mid', label: 'Inter-Hall Connecting Passage', x: 780, y: 450, hall: 'Passage', type: 'passage' },
-  passage_hanger_gate: { id: 'passage_hanger_gate', label: 'Hanger Passage Entrance', x: 700, y: 450, hall: 'Passage', type: 'passage' },
+  passage_mid: { id: 'passage_mid', label: 'Inter-Hall Connecting Passage', x: 790, y: 450, hall: 'Passage', type: 'passage' },
+  passage_hanger_gate: { id: 'passage_hanger_gate', label: 'Hanger Passage Entrance', x: 710, y: 450, hall: 'Passage', type: 'passage' },
 
   // Hanger East Corridor (X: 690)
   hanger_east_top: { id: 'hanger_east_top', label: 'Hanger North-East Corridor', x: 690, y: 140, hall: 'Hanger', type: 'aisle' },
@@ -65,6 +68,7 @@ export const VENUE_NODES: Record<string, NavNode> = {
   hanger_mid_top: { id: 'hanger_mid_top', label: 'Hanger Central North Junction', x: 470, y: 140, hall: 'Hanger', type: 'aisle' },
   hanger_mid_upper: { id: 'hanger_mid_upper', label: 'Hanger Central Aisle 1', x: 470, y: 270, hall: 'Hanger', type: 'aisle' },
   hanger_mid_ramappa_n: { id: 'hanger_mid_ramappa_n', label: 'Ramappa Theme Pavilion (North Access)', x: 470, y: 390, hall: 'Hanger', type: 'landmark' },
+  hanger_mid_cross: { id: 'hanger_mid_cross', label: 'Hanger Central Passage Junction', x: 470, y: 450, hall: 'Hanger', type: 'aisle' },
   hanger_mid_ramappa_s: { id: 'hanger_mid_ramappa_s', label: 'Ramappa Theme Pavilion (South Access)', x: 470, y: 500, hall: 'Hanger', type: 'landmark' },
   hanger_mid_lower: { id: 'hanger_mid_lower', label: 'Hanger Central Aisle 2', x: 470, y: 640, hall: 'Hanger', type: 'aisle' },
   hanger_mid_bot: { id: 'hanger_mid_bot', label: 'Hanger Central South Junction', x: 470, y: 760, hall: 'Hanger', type: 'aisle' },
@@ -138,11 +142,13 @@ export const VENUE_EDGES: NavEdge[] = [
   { from: 'hall1_south_mid', to: 'hall1_south_c2', distanceM: 4, hall: 'Hall-1', aisleName: 'Hall-1 South Promenade (6.0m)', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
   { from: 'hall1_south_c2', to: 'hall1_south_e', distanceM: 9, hall: 'Hall-1', aisleName: 'Hall-1 South Promenade (6.0m)', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
 
-  // Hall-1 Vertical spines
+  // Hall-1 West Corridor Spine (Orthogonal chain: 740 -> 520 -> 450 -> 320 -> 140)
   { from: 'hall1_south_w', to: 'hall1_mid_w', distanceM: 11, hall: 'Hall-1', aisleName: 'Hall-1 West Perimeter Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hall1_west_perimeter' },
-  { from: 'hall1_mid_w', to: 'hall1_north_w', distanceM: 10, hall: 'Hall-1', aisleName: 'Hall-1 West Perimeter Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hall1_west_perimeter' },
+  { from: 'hall1_mid_w', to: 'hall1_west_passage_jct', distanceM: 4, hall: 'Hall-1', aisleName: 'Hall-1 West Perimeter Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hall1_west_perimeter' },
+  { from: 'hall1_west_passage_jct', to: 'hall1_north_w', distanceM: 7, hall: 'Hall-1', aisleName: 'Hall-1 West Perimeter Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hall1_west_perimeter' },
   { from: 'hall1_north_w', to: 'hall1_top_w', distanceM: 9, hall: 'Hall-1', aisleName: 'Hall-1 West Perimeter Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hall1_west_perimeter' },
 
+  // Hall-1 Other Vertical spines
   { from: 'hall1_south_c1', to: 'hall1_mid_c1', distanceM: 11, hall: 'Hall-1', aisleName: 'Hall-1 Cross Aisle 1 (3.0m)', aisleWidth: '3.0M', pathwayId: 'hall1_cross_aisle_1' },
   { from: 'hall1_mid_c1', to: 'hall1_north_c1', distanceM: 10, hall: 'Hall-1', aisleName: 'Hall-1 Cross Aisle 1 (3.0m)', aisleWidth: '3.0M', pathwayId: 'hall1_cross_aisle_1' },
 
@@ -198,36 +204,37 @@ export const VENUE_EDGES: NavEdge[] = [
   { from: 'hall1_south_mid', to: 'hall1_node_south', distanceM: 3, hall: 'Hall-1', aisleName: 'South Promenade Access', aisleWidth: '6.0M', pathwayId: 'hall1_south_promenade' },
   { from: 'hall1_mid_w', to: 'hall1_node_west', distanceM: 3, hall: 'Hall-1', aisleName: 'West Perimeter Access', aisleWidth: '2.5M', pathwayId: 'hall1_west_perimeter' },
 
-  // PASSAGE: Connecting Hall-1 and Hanger (2.5M Covered Passage)
-  { from: 'hall1_mid_w', to: 'passage_hall1_gate', distanceM: 5, hall: 'Passage', aisleName: 'Inter-Hall Passage (2.5m)', aisleWidth: '2.5M', pathwayId: 'passage_covered_walkway' },
-  { from: 'passage_hall1_gate', to: 'passage_mid', distanceM: 6, hall: 'Passage', aisleName: 'Inter-Hall Passage (2.5m)', aisleWidth: '2.5M', pathwayId: 'passage_covered_walkway' },
-  { from: 'passage_mid', to: 'passage_hanger_gate', distanceM: 6, hall: 'Passage', aisleName: 'Inter-Hall Passage (2.5m)', aisleWidth: '2.5M', pathwayId: 'passage_covered_walkway' },
-  { from: 'passage_hanger_gate', to: 'hanger_east_mid', distanceM: 4, hall: 'Hanger', aisleName: 'Hanger East Avenue Entry', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
+  // PASSAGE: Connecting Hall-1 and Hanger along exact horizontal axis Y: 450
+  { from: 'hall1_west_passage_jct', to: 'passage_hall1_gate', distanceM: 2, hall: 'Passage', aisleName: 'Inter-Hall Covered Passage (2.5m)', aisleWidth: '2.5M', pathwayId: 'passage_covered_walkway' },
+  { from: 'passage_hall1_gate', to: 'passage_mid', distanceM: 4, hall: 'Passage', aisleName: 'Inter-Hall Covered Passage (2.5m)', aisleWidth: '2.5M', pathwayId: 'passage_covered_walkway' },
+  { from: 'passage_mid', to: 'passage_hanger_gate', distanceM: 4, hall: 'Passage', aisleName: 'Inter-Hall Covered Passage (2.5m)', aisleWidth: '2.5M', pathwayId: 'passage_covered_walkway' },
+  { from: 'passage_hanger_gate', to: 'hanger_east_mid', distanceM: 1, hall: 'Hanger', aisleName: 'Hanger East Avenue Entry', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
 
-  // Hanger East corridor (3.0M Avenue)
+  // Hanger East corridor (3.0M Avenue along X: 690)
   { from: 'hanger_east_top', to: 'hanger_east_upper', distanceM: 8, hall: 'Hanger', aisleName: 'Hanger East Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
   { from: 'hanger_east_upper', to: 'hanger_east_mid', distanceM: 9, hall: 'Hanger', aisleName: 'Hanger East Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
   { from: 'hanger_east_mid', to: 'hanger_east_lower', distanceM: 10, hall: 'Hanger', aisleName: 'Hanger East Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
   { from: 'hanger_east_lower', to: 'hanger_east_bot', distanceM: 8, hall: 'Hanger', aisleName: 'Hanger East Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_east_avenue' },
 
-  // Hanger Center corridor (3.0M / 4.0M Avenue around Ramappa Temple)
+  // Hanger Center corridor (3.0M Avenue along X: 470)
   { from: 'hanger_mid_top', to: 'hanger_mid_upper', distanceM: 8, hall: 'Hanger', aisleName: 'Hanger Central Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_central_avenue' },
-  { from: 'hanger_mid_upper', to: 'hanger_mid_ramappa_n', distanceM: 6, hall: 'Hanger', aisleName: 'Ramappa Temple North Promenade (4.0m)', aisleWidth: '4.0M', pathwayId: 'hanger_ramappa_north' },
-  { from: 'hanger_mid_ramappa_n', to: 'hanger_mid_ramappa_s', distanceM: 6, hall: 'Hanger', aisleName: 'Ramappa Temple Central Axis', aisleWidth: '4.0M', pathwayId: 'hanger_central_avenue' },
-  { from: 'hanger_mid_ramappa_s', to: 'hanger_mid_lower', distanceM: 7, hall: 'Hanger', aisleName: 'Ramappa Temple South Promenade (4.0m)', aisleWidth: '4.0M', pathwayId: 'hanger_ramappa_south' },
+  { from: 'hanger_mid_upper', to: 'hanger_mid_ramappa_n', distanceM: 6, hall: 'Hanger', aisleName: 'Hanger Central Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_central_avenue' },
+  { from: 'hanger_mid_ramappa_n', to: 'hanger_mid_cross', distanceM: 3, hall: 'Hanger', aisleName: 'Hanger Central Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_central_avenue' },
+  { from: 'hanger_mid_cross', to: 'hanger_mid_ramappa_s', distanceM: 3, hall: 'Hanger', aisleName: 'Hanger Central Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_central_avenue' },
+  { from: 'hanger_mid_ramappa_s', to: 'hanger_mid_lower', distanceM: 7, hall: 'Hanger', aisleName: 'Hanger Central Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_central_avenue' },
   { from: 'hanger_mid_lower', to: 'hanger_mid_bot', distanceM: 8, hall: 'Hanger', aisleName: 'Hanger Central Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_central_avenue' },
 
-  // Hanger West corridor (3.0M Avenue)
+  // Hanger West corridor (3.0M Avenue along X: 250)
   { from: 'hanger_west_top', to: 'hanger_west_upper', distanceM: 8, hall: 'Hanger', aisleName: 'Hanger West Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_west_avenue' },
   { from: 'hanger_west_upper', to: 'hanger_west_mid', distanceM: 9, hall: 'Hanger', aisleName: 'Hanger West Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_west_avenue' },
   { from: 'hanger_west_mid', to: 'hanger_west_lower', distanceM: 10, hall: 'Hanger', aisleName: 'Hanger West Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_west_avenue' },
   { from: 'hanger_west_lower', to: 'hanger_west_bot', distanceM: 8, hall: 'Hanger', aisleName: 'Hanger West Avenue (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_west_avenue' },
 
-  // Hanger Outer West corridor (2.5M Perimeter)
+  // Hanger Outer West corridor (2.5M Perimeter along X: 110)
   { from: 'hanger_outer_top', to: 'hanger_outer_mid', distanceM: 16, hall: 'Hanger', aisleName: 'Hanger Outer West Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hanger_outer_west_perimeter' },
   { from: 'hanger_outer_mid', to: 'hanger_outer_bot', distanceM: 16, hall: 'Hanger', aisleName: 'Hanger Outer West Walkway (2.5m)', aisleWidth: '2.5M', pathwayId: 'hanger_outer_west_perimeter' },
 
-  // Hanger Horizontal cross spines
+  // Hanger Horizontal cross spines (Exact 90-degree alignment)
   { from: 'hanger_outer_top', to: 'hanger_west_top', distanceM: 7, hall: 'Hanger', aisleName: 'Hanger North Aisle (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_north_aisle' },
   { from: 'hanger_west_top', to: 'hanger_mid_top', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger North Aisle (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_north_aisle' },
   { from: 'hanger_mid_top', to: 'hanger_east_top', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger North Aisle (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_north_aisle' },
@@ -236,7 +243,8 @@ export const VENUE_EDGES: NavEdge[] = [
   { from: 'hanger_mid_upper', to: 'hanger_east_upper', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger Upper Cross Aisle (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_upper_cross' },
 
   { from: 'hanger_outer_mid', to: 'hanger_west_mid', distanceM: 7, hall: 'Hanger', aisleName: 'Hanger Mid Cross Connector (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_ramappa_north' },
-  { from: 'hanger_west_mid', to: 'passage_hanger_gate', distanceM: 22, hall: 'Hanger', aisleName: 'Ramappa North Promenade (4.0m)', aisleWidth: '4.0M', pathwayId: 'hanger_ramappa_north' },
+  { from: 'hanger_west_mid', to: 'hanger_mid_cross', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger Mid Cross Connector (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_ramappa_north' },
+  { from: 'hanger_mid_cross', to: 'hanger_east_mid', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger Mid Cross Connector (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_ramappa_north' },
 
   { from: 'hanger_west_lower', to: 'hanger_mid_lower', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger Lower Cross Aisle (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_lower_cross' },
   { from: 'hanger_mid_lower', to: 'hanger_east_lower', distanceM: 11, hall: 'Hanger', aisleName: 'Hanger Lower Cross Aisle (3.0m)', aisleWidth: '3.0M', pathwayId: 'hanger_lower_cross' },
@@ -294,7 +302,6 @@ export type RouteStep = {
   pathwayId?: string;
 };
 
-// Dijkstra shortest-path router
 export type RoutePath = {
   nodes: NavNode[];
   distanceMeters: number;
@@ -304,13 +311,152 @@ export type RoutePath = {
   pathwayIds: string[];
 };
 
-export function findShortestPath(startNodeId: string, destNodeId: string): RoutePath | null {
-  if (!VENUE_NODES[startNodeId] || !VENUE_NODES[destNodeId]) {
-    return null;
+export type TargetDestination = {
+  id: string;
+  companyName: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  hall: string;
+};
+
+export type Corridor =
+  | { name: string; axis: 'h'; y: number; xMin: number; xMax: number; pathwayId: string }
+  | { name: string; axis: 'v'; x: number; yMin: number; yMax: number; pathwayId: string };
+
+// Major orthogonal walkable corridors
+const HALL1_CORRIDORS: Corridor[] = [
+  { name: 'Hall-1 North Perimeter Walkway (3.0m)', axis: 'h', y: 140, xMin: 890, xMax: 1450, pathwayId: 'hall1_top_perimeter' },
+  { name: 'Hall-1 North Grand Aisle (6.0m)', axis: 'h', y: 320, xMin: 890, xMax: 1450, pathwayId: 'hall1_north_grand_aisle' },
+  { name: 'Hall-1 Central Grand Aisle (6.0m)', axis: 'h', y: 520, xMin: 890, xMax: 1450, pathwayId: 'hall1_central_grand_aisle' },
+  { name: 'Hall-1 South Promenade (6.0m)', axis: 'h', y: 740, xMin: 890, xMax: 1450, pathwayId: 'hall1_south_promenade' },
+  { name: 'Hall-1 West Perimeter Walkway (2.5m)', axis: 'v', x: 890, yMin: 140, yMax: 740, pathwayId: 'hall1_west_perimeter' },
+  { name: 'Hall-1 Cross Aisle 1 (3.0m)', axis: 'v', x: 1070, yMin: 140, yMax: 740, pathwayId: 'hall1_cross_aisle_1' },
+  { name: 'Hall-1 Central Grand Aisle (6.0m)', axis: 'v', x: 1200, yMin: 140, yMax: 760, pathwayId: 'hall1_central_grand_aisle' },
+  { name: 'Hall-1 Cross Aisle 2 (3.0m)', axis: 'v', x: 1270, yMin: 140, yMax: 740, pathwayId: 'hall1_cross_aisle_2' },
+  { name: 'Hall-1 East Perimeter Walkway (2.5m)', axis: 'v', x: 1450, yMin: 140, yMax: 740, pathwayId: 'hall1_east_perimeter' },
+];
+
+const HANGER_CORRIDORS: Corridor[] = [
+  { name: 'Hanger North Aisle (3.0m)', axis: 'h', y: 140, xMin: 110, xMax: 690, pathwayId: 'hanger_north_aisle' },
+  { name: 'Hanger Upper Cross Aisle (3.0m)', axis: 'h', y: 270, xMin: 110, xMax: 690, pathwayId: 'hanger_upper_cross' },
+  { name: 'Hanger Passage Cross Aisle (3.0m)', axis: 'h', y: 450, xMin: 110, xMax: 690, pathwayId: 'hanger_ramappa_north' },
+  { name: 'Hanger Lower Cross Aisle (3.0m)', axis: 'h', y: 640, xMin: 110, xMax: 690, pathwayId: 'hanger_lower_cross' },
+  { name: 'Hanger South Promenade (3.0m)', axis: 'h', y: 760, xMin: 110, xMax: 690, pathwayId: 'hanger_south_promenade' },
+  { name: 'Hanger Outer West Walkway (2.5m)', axis: 'v', x: 110, yMin: 140, yMax: 760, pathwayId: 'hanger_outer_west_perimeter' },
+  { name: 'Hanger West Avenue (3.0m)', axis: 'v', x: 250, yMin: 140, yMax: 760, pathwayId: 'hanger_west_avenue' },
+  { name: 'Hanger Central Avenue (3.0m)', axis: 'v', x: 470, yMin: 140, yMax: 760, pathwayId: 'hanger_central_avenue' },
+  { name: 'Hanger East Avenue (3.0m)', axis: 'v', x: 690, yMin: 140, yMax: 760, pathwayId: 'hanger_east_avenue' },
+];
+
+function projectToNearestCorridor(cx: number, cy: number, hall: string) {
+  const corridors: Corridor[] = hall === 'Hanger' ? HANGER_CORRIDORS : HALL1_CORRIDORS;
+  let best: Corridor = corridors[0];
+  let px = cx;
+  let py = cy;
+  let minDist = Infinity;
+  for (const c of corridors) {
+    let testX: number;
+    let testY: number;
+    if (c.axis === 'h') {
+      testX = Math.max(c.xMin, Math.min(c.xMax, cx));
+      testY = c.y;
+    } else {
+      testX = c.x;
+      testY = Math.max(c.yMin, Math.min(c.yMax, cy));
+    }
+    const dist = Math.hypot(cx - testX, cy - testY);
+    if (dist < minDist) {
+      minDist = dist;
+      best = c;
+      px = testX;
+      py = testY;
+    }
+  }
+  return { corridor: best, px: Math.round(px), py: Math.round(py), dist: minDist };
+}
+
+function findNearestGraphNodeOnCorridor(doorX: number, doorY: number, corridor: Corridor, hall: 'Hall-1' | 'Hanger'): NavNode {
+  let bestNode: NavNode | null = null;
+  let minDist = Infinity;
+
+  for (const id in VENUE_NODES) {
+    const n = VENUE_NODES[id];
+    if (n.hall !== hall && n.hall !== 'Passage') continue;
+    if (n.type !== 'aisle') continue;
+
+    let onCorridor = false;
+    if (corridor.axis === 'h') {
+      onCorridor = Math.abs(n.y - corridor.y) <= 15;
+    } else {
+      onCorridor = Math.abs(n.x - corridor.x) <= 15;
+    }
+
+    if (onCorridor) {
+      const dist = Math.hypot(n.x - doorX, n.y - doorY);
+      if (dist < minDist) {
+        minDist = dist;
+        bestNode = n;
+      }
+    }
   }
 
+  return bestNode || (hall === 'Hanger' ? VENUE_NODES.hanger_east_mid : VENUE_NODES.hall1_south_mid);
+}
+
+// Clean corridor name for user-friendly speech & directions
+function cleanAisleLabel(name: string): string {
+  if (!name) return 'Walkway';
+  return name
+    .replace(/\s*\([0-9.]+m\)/gi, '')
+    .replace(/\s*\([0-9.]+M\)/gi, '')
+    .trim();
+}
+
+export function findShortestPath(
+  startNodeId: string,
+  destNodeId: string,
+  targetExhibitor?: TargetDestination | null
+): RoutePath | null {
+  const startNode = VENUE_NODES[startNodeId];
+  if (!startNode) return null;
+
+  let effectiveTargetNodeId = destNodeId;
+  let doorX: number | null = null;
+  let doorY: number | null = null;
+  let stallCenterX: number | null = null;
+  let stallCenterY: number | null = null;
+  let accessCorridor: any = null;
+
+  if (targetExhibitor && typeof targetExhibitor.x === 'number') {
+    stallCenterX = Math.round(targetExhibitor.x + targetExhibitor.width / 2);
+    stallCenterY = Math.round(targetExhibitor.y + targetExhibitor.height / 2);
+    const hall = (targetExhibitor.hall === 'Hanger' ? 'Hanger' : 'Hall-1') as 'Hall-1' | 'Hanger';
+    const proj = projectToNearestCorridor(stallCenterX, stallCenterY, hall);
+    doorX = proj.px;
+    doorY = proj.py;
+    accessCorridor = proj.corridor;
+
+    const anchorNode = findNearestGraphNodeOnCorridor(doorX, doorY, accessCorridor, hall);
+    if (anchorNode) {
+      effectiveTargetNodeId = anchorNode.id;
+    }
+  }
+
+  if (!VENUE_NODES[effectiveTargetNodeId]) {
+    effectiveTargetNodeId = destNodeId;
+  }
+
+  // Dijkstra graph search
   const adj: Record<string, { node: string; weight: number; edge: NavEdge }[]> = {};
   for (const edge of VENUE_EDGES) {
+    if (
+      VENUE_NODES[edge.from]?.type === 'booth_access' ||
+      VENUE_NODES[edge.to]?.type === 'booth_access'
+    ) {
+      continue;
+    }
     if (!adj[edge.from]) adj[edge.from] = [];
     if (!adj[edge.to]) adj[edge.to] = [];
     adj[edge.from].push({ node: edge.to, weight: edge.distanceM, edge });
@@ -340,7 +486,7 @@ export function findShortestPath(startNodeId: string, destNodeId: string): Route
     });
 
     if (current === null || distances[current] === Infinity) break;
-    if (current === destNodeId) break;
+    if (current === effectiveTargetNodeId) break;
 
     unvisited.delete(current);
 
@@ -354,10 +500,10 @@ export function findShortestPath(startNodeId: string, destNodeId: string): Route
     }
   }
 
-  // Backtrack path
+  // Backtrack graph path
   const pathIds: string[] = [];
   const edgesTaken: NavEdge[] = [];
-  let curr: string | null = destNodeId;
+  let curr: string | null = effectiveTargetNodeId;
   while (curr && curr !== startNodeId) {
     pathIds.unshift(curr);
     const prevInfo: { from: string; edge: NavEdge } | null = previous[curr] || null;
@@ -372,139 +518,188 @@ export function findShortestPath(startNodeId: string, destNodeId: string): Route
   if (curr === startNodeId) {
     pathIds.unshift(startNodeId);
   } else {
-    // Graceful fallback: return direct path between start and destination
-    const sNode = VENUE_NODES[startNodeId];
-    const dNode = VENUE_NODES[destNodeId];
-    if (!sNode || !dNode) return null;
-    const estM = Math.max(8, Math.round(Math.hypot(dNode.x - sNode.x, dNode.y - sNode.y) * 0.08));
-    return {
-      nodes: [sNode, dNode],
-      distanceMeters: estM,
-      walkingMinutes: Math.max(1, Math.round(estM / 65)),
-      directions: [`Start at ${sNode.label}`, `Proceed directly to ${dNode.label}`],
-      steps: [
-        {
-          stepIndex: 1,
-          instruction: `Start at ${sNode.label}`,
-          turnType: 'start',
-          aisleName: sNode.hall === 'Passage' ? 'Connecting Walkway' : `${sNode.hall} Main Floor`,
-          aisleWidth: '4.0M',
-          fromNodeId: sNode.id,
-          toNodeId: dNode.id,
-          distanceM: estM,
-          cumulativeDistanceM: estM,
-          hall: sNode.hall,
-        },
-        {
-          stepIndex: 2,
-          instruction: `Arrive at ${dNode.label}`,
-          turnType: 'arrive',
-          aisleName: dNode.hall === 'Passage' ? 'Connecting Walkway' : `${dNode.hall} Main Floor`,
-          aisleWidth: '4.0M',
-          fromNodeId: sNode.id,
-          toNodeId: dNode.id,
-          distanceM: estM,
-          cumulativeDistanceM: estM,
-          hall: dNode.hall,
-        },
-      ],
-      pathwayIds: [],
-    };
+    // Fallback: connect start to destination
+    pathIds.length = 0;
+    pathIds.push(startNodeId, effectiveTargetNodeId);
   }
 
-  const nodes = pathIds.map((id) => VENUE_NODES[id]).filter(Boolean);
-  const totalMeters = distances[destNodeId] || 15;
-  const minutes = Math.max(1, Math.round((totalMeters / 65) * 10) / 10); // ~1.1 m/s walking speed
-
-  // Generate enriched steps with geometry-based turn directions
-  const steps: RouteStep[] = [];
-  const directions: string[] = [];
+  const nodes: NavNode[] = pathIds.map((id) => VENUE_NODES[id]).filter(Boolean);
   const traversedPathwayIds = new Set<string>();
-  let cumDistance = 0;
+  edgesTaken.forEach((e) => {
+    if (e.pathwayId) traversedPathwayIds.add(e.pathwayId);
+  });
 
-  // Step 0: Start
-  if (nodes.length > 0 && nodes[0]) {
-    steps.push({
-      stepIndex: 1,
-      instruction: `Start at ${nodes[0].label || 'Current Location'}`,
-      turnType: 'start',
-      aisleName: nodes[0].hall === 'Passage' ? 'Inter-Hall Passage' : `${nodes[0].hall} Main Floor`,
-      aisleWidth: nodes[0].hall === 'Passage' ? '2.5M' : '6.0M',
-      fromNodeId: nodes[0].id,
-      toNodeId: nodes[0].id,
-      distanceM: 0,
-      cumulativeDistanceM: 0,
-      hall: nodes[0].hall,
-    });
-    directions.push(`Start at ${nodes[0].label || 'Current Location'}`);
-  }
+  // Append orthogonal doorway and destination booth nodes if routing to an exhibitor
+  if (targetExhibitor && stallCenterX !== null && stallCenterY !== null && accessCorridor) {
+    const lastNode = nodes[nodes.length - 1];
+    const hall = (targetExhibitor.hall === 'Hanger' ? 'Hanger' : 'Hall-1') as 'Hall-1' | 'Hanger';
 
-  for (let i = 0; i < edgesTaken.length; i++) {
-    const edge = edgesTaken[i];
-    const fromNode = nodes[i];
-    const toNode = nodes[i + 1];
-    if (!edge || !fromNode || !toNode) continue;
-    cumDistance += edge.distanceM;
-
-    if (edge.pathwayId) {
-      traversedPathwayIds.add(edge.pathwayId);
+    if (accessCorridor.pathwayId) {
+      traversedPathwayIds.add(accessCorridor.pathwayId);
     }
 
+    if (accessCorridor.axis === 'h') {
+      // 1. Move horizontally along corridor to stall's x coordinate
+      if (lastNode.x !== stallCenterX) {
+        nodes.push({
+          id: 'doorway_' + targetExhibitor.id,
+          label: cleanAisleLabel(accessCorridor.name),
+          x: stallCenterX,
+          y: accessCorridor.y,
+          hall,
+          type: 'aisle',
+        });
+      }
+      // 2. Step vertically into stall center
+      if (accessCorridor.y !== stallCenterY) {
+        nodes.push({
+          id: 'dest_' + targetExhibitor.id,
+          label: targetExhibitor.companyName,
+          x: stallCenterX,
+          y: stallCenterY,
+          hall,
+          type: 'booth_access',
+        });
+      }
+    } else {
+      // 1. Move vertically along corridor to stall's y coordinate
+      if (lastNode.y !== stallCenterY) {
+        nodes.push({
+          id: 'doorway_' + targetExhibitor.id,
+          label: cleanAisleLabel(accessCorridor.name),
+          x: accessCorridor.x,
+          y: stallCenterY,
+          hall,
+          type: 'aisle',
+        });
+      }
+      // 2. Step horizontally into stall center
+      if (accessCorridor.x !== stallCenterX) {
+        nodes.push({
+          id: 'dest_' + targetExhibitor.id,
+          label: targetExhibitor.companyName,
+          x: stallCenterX,
+          y: stallCenterY,
+          hall,
+          type: 'booth_access',
+        });
+      }
+    }
+  }
+
+  // Calculate total path distance accurately in meters (scale ~ 0.08 m per pixel)
+  let totalMeters = 0;
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const segDistPx = Math.hypot(nodes[i + 1].x - nodes[i].x, nodes[i + 1].y - nodes[i].y);
+    totalMeters += segDistPx * 0.08;
+  }
+  totalMeters = Math.max(12, Math.round(totalMeters));
+  const walkingMinutes = Math.max(1, Math.round((totalMeters / 60) * 10) / 10);
+
+  // Generate turn steps with directional step consolidation (no repeating micro-steps, no empty ())
+  type RawStep = {
+    turnType: 'start' | 'straight' | 'left' | 'right' | 'passage' | 'arrive';
+    label: string;
+    distanceM: number;
+    hall: 'Hall-1' | 'Hanger' | 'Passage';
+    dir: 'N' | 'S' | 'E' | 'W';
+    isLast: boolean;
+  };
+
+  const rawSteps: RawStep[] = [];
+
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const fromN = nodes[i];
+    const toN = nodes[i + 1];
+    const isFirst = i === 0;
+    const isLast = i === nodes.length - 2;
+
+    const dx = toN.x - fromN.x;
+    const dy = toN.y - fromN.y;
+    const dir: 'N' | 'S' | 'E' | 'W' = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : (dy > 0 ? 'S' : 'N');
+    const segDist = Math.max(2, Math.round(Math.hypot(dx, dy) * 0.08));
+
     let turnType: 'start' | 'straight' | 'left' | 'right' | 'passage' | 'arrive' = 'straight';
-    let turnVerb = 'Continue straight';
 
-    if (i === edgesTaken.length - 1) {
+    if (isLast) {
       turnType = 'arrive';
-      turnVerb = 'Arrive at destination';
-    } else if (toNode.type === 'passage' || fromNode.type === 'passage') {
+    } else if (toN.hall === 'Passage' || fromN.hall === 'Passage') {
       turnType = 'passage';
-      turnVerb = 'Enter 2.5m Covered Connecting Passage';
-    } else if (i > 0) {
-      // Calculate 2D turn angle
-      const prevNode = nodes[i - 1];
-      const dx1 = fromNode.x - prevNode.x;
-      const dy1 = fromNode.y - prevNode.y;
-      const dx2 = toNode.x - fromNode.x;
-      const dy2 = toNode.y - fromNode.y;
-
-      const cross = dx1 * dy2 - dy1 * dx2;
-      const dot = dx1 * dx2 + dy1 * dy2;
-
+    } else if (isFirst) {
+      turnType = 'start';
+    } else {
+      const prevN = nodes[i - 1];
+      const dx1 = fromN.x - prevN.x;
+      const dy1 = fromN.y - prevN.y;
+      const cross = dx1 * dy - dy1 * dx;
       if (Math.abs(cross) > 200) {
-        if (cross > 0) {
-          turnType = 'right';
-          turnVerb = 'Turn right';
-        } else {
-          turnType = 'left';
-          turnVerb = 'Turn left';
-        }
-      } else if (dot < 0) {
-        turnType = 'left';
-        turnVerb = 'Turn around';
+        turnType = cross > 0 ? 'right' : 'left';
       }
     }
 
-    let instruction = '';
-    if (turnType === 'arrive') {
-      instruction = `Arrive at ${toNode.label}`;
-    } else if (turnType === 'passage') {
-      instruction = `Cross Inter-Hall Covered Passage (${edge.aisleWidth}) between Hall-1 and Hanger (${edge.distanceM}m)`;
-    } else {
-      instruction = `${turnVerb} onto ${edge.aisleName} for ${edge.distanceM}m`;
+    rawSteps.push({
+      turnType,
+      label: toN.label,
+      distanceM: segDist,
+      hall: toN.hall,
+      dir,
+      isLast,
+    });
+  }
+
+  // Consolidate consecutive steps that move along the same straight direction
+  const consolidatedSteps: RouteStep[] = [];
+  const directions: string[] = [];
+  let cumM = 0;
+
+  for (let i = 0; i < rawSteps.length; i++) {
+    const curr = rawSteps[i];
+    let stepDist = curr.distanceM;
+    let label = curr.label;
+
+    while (
+      i + 1 < rawSteps.length &&
+      !curr.isLast &&
+      !rawSteps[i + 1].isLast &&
+      rawSteps[i + 1].dir === curr.dir &&
+      (rawSteps[i + 1].hall === curr.hall || curr.hall === 'Passage' || rawSteps[i + 1].hall === 'Passage')
+    ) {
+      stepDist += rawSteps[i + 1].distanceM;
+      label = rawSteps[i + 1].label;
+      i++;
     }
 
-    steps.push({
-      stepIndex: steps.length + 1,
+    cumM += stepDist;
+
+    let instruction = '';
+    const cleanLabel = cleanAisleLabel(label);
+
+    if (curr.turnType === 'start') {
+      instruction = `Head straight along ${cleanLabel || 'Main Entrance Walkway'} (${stepDist} m)`;
+    } else if (curr.turnType === 'left') {
+      instruction = `Turn left onto ${cleanLabel || 'Walkway'} (${stepDist} m)`;
+    } else if (curr.turnType === 'right') {
+      instruction = `Turn right onto ${cleanLabel || 'Walkway'} (${stepDist} m)`;
+    } else if (curr.turnType === 'passage') {
+      instruction = `Walk through Inter-Hall Covered Passage to Hanger (${stepDist} m)`;
+    } else if (curr.turnType === 'arrive') {
+      const destName = targetExhibitor ? targetExhibitor.companyName : cleanLabel;
+      instruction = `Arrive at ${destName} on your right (${stepDist} m)`;
+    } else {
+      instruction = `Continue along ${cleanLabel || 'Corridor'} (${stepDist} m)`;
+    }
+
+    consolidatedSteps.push({
+      stepIndex: consolidatedSteps.length + 1,
       instruction,
-      turnType,
-      aisleName: edge.aisleName,
-      aisleWidth: edge.aisleWidth,
-      fromNodeId: fromNode.id,
-      toNodeId: toNode.id,
-      distanceM: edge.distanceM,
-      cumulativeDistanceM: Math.round(cumDistance),
-      hall: edge.hall,
-      pathwayId: edge.pathwayId,
+      turnType: curr.turnType,
+      aisleName: cleanLabel,
+      aisleWidth: curr.turnType === 'passage' ? '2.5M' : '4.0M',
+      fromNodeId: nodes[0].id,
+      toNodeId: nodes[nodes.length - 1].id,
+      distanceM: stepDist,
+      cumulativeDistanceM: cumM,
+      hall: curr.hall,
     });
 
     directions.push(instruction);
@@ -512,10 +707,10 @@ export function findShortestPath(startNodeId: string, destNodeId: string): Route
 
   return {
     nodes,
-    distanceMeters: Math.round(totalMeters),
-    walkingMinutes: minutes,
+    distanceMeters: totalMeters,
+    walkingMinutes,
     directions,
-    steps,
+    steps: consolidatedSteps,
     pathwayIds: Array.from(traversedPathwayIds),
   };
 }
